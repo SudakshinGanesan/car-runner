@@ -7,13 +7,42 @@
   <style>
     body { margin: 0; overflow: hidden; background: #222; }
     canvas { display: block; margin: 0 auto; background: #333; }
+    #touchControls {
+      position: fixed;
+      bottom: 20px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      z-index: 10;
+    }
+    #touchControls button {
+      font-size: 24px;
+      padding: 15px 25px;
+      border-radius: 12px;
+      border: none;
+      background-color: #444;
+      color: white;
+    }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="1200" height="600"></canvas>
+  <canvas id="gameCanvas"></canvas>
+  <div id="touchControls">
+    <button id="leftBtn">◀️</button>
+    <button id="jumpBtn">🔼</button>
+    <button id="rightBtn">▶️</button>
+  </div>
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
 
     const carImg = new Image();
     let carImgLoaded = false;
@@ -81,7 +110,7 @@
 
       ctx.fillStyle = "#555";
       for (let i = 0; i < canvas.width / 60 + 2; i++) {
-        ctx.fillRect(i * 60 + roadOffset, 510, 30, roadHeight);
+        ctx.fillRect(i * 60 + roadOffset, canvas.height - 60, 30, roadHeight);
       }
     }
 
@@ -131,7 +160,7 @@
         const isTree = Math.random() < 0.5;
         if (isTree) {
           const height = 80 + Math.random() * 120; // range 80 to 200
-          const y = 570 - height;
+          const y = canvas.height - 30 - height;
           obstacles.push({ x: canvas.width, y: y, width: 60, height, type: "tree", trunkRandom: Math.random() });
         } else {
           obstacles.push({ x: canvas.width, y: 180 + Math.random() * 60, width: 90, height: 50, type: "cloud" });
@@ -173,8 +202,9 @@
         car.dy += gravity;
         car.y += car.dy;
 
-        if (car.y >= 450) {
-          car.y = 450;
+        const groundY = canvas.height - 150;
+        if (car.y >= groundY) {
+          car.y = groundY;
           car.dy = 0;
           car.onGround = true;
         }
@@ -195,7 +225,7 @@
 
     function restartGame() {
       car.x = 100;
-      car.y = 450;
+      car.y = canvas.height - 150;
       car.dy = 0;
       car.onGround = true;
       obstacles = [];
@@ -215,6 +245,19 @@
         car.x -= 10;
       } else if (e.key === "r" || e.key === "R") {
         if (gameOver) restartGame();
+      }
+    });
+
+    document.getElementById("leftBtn").addEventListener("touchstart", () => {
+      if (!gameOver) car.x -= 10;
+    });
+    document.getElementById("rightBtn").addEventListener("touchstart", () => {
+      if (!gameOver) car.x += 10;
+    });
+    document.getElementById("jumpBtn").addEventListener("touchstart", () => {
+      if (car.onGround && !gameOver) {
+        car.dy = jumpStrength;
+        car.onGround = false;
       }
     });
 
