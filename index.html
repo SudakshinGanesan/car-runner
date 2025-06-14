@@ -248,18 +248,45 @@
       }
     });
 
-    document.getElementById("leftBtn").addEventListener("touchstart", () => {
-      if (!gameOver) car.x -= 10;
-    });
-    document.getElementById("rightBtn").addEventListener("touchstart", () => {
-      if (!gameOver) car.x += 10;
-    });
-    document.getElementById("jumpBtn").addEventListener("touchstart", () => {
-      if (car.onGround && !gameOver) {
-        car.dy = jumpStrength;
-        car.onGround = false;
-      }
-    });
+    function setupTouchControls() {
+      const left = document.getElementById("leftBtn");
+      const right = document.getElementById("rightBtn");
+      const jump = document.getElementById("jumpBtn");
+
+      const activate = (action) => (e) => {
+        e.preventDefault();
+        action();
+      };
+
+      left.addEventListener("touchstart", activate(() => {
+        if (!gameOver) car.x -= 10;
+      }));
+      left.addEventListener("click", activate(() => {
+        if (!gameOver) car.x -= 10;
+      }));
+
+      right.addEventListener("touchstart", activate(() => {
+        if (!gameOver) car.x += 10;
+      }));
+      right.addEventListener("click", activate(() => {
+        if (!gameOver) car.x += 10;
+      }));
+
+      jump.addEventListener("touchstart", activate(() => {
+        if (car.onGround && !gameOver) {
+          car.dy = jumpStrength;
+          car.onGround = false;
+        }
+      }));
+      jump.addEventListener("click", activate(() => {
+        if (car.onGround && !gameOver) {
+          car.dy = jumpStrength;
+          car.onGround = false;
+        }
+      }));
+    }
+
+    setupTouchControls();
 
     update();
   </script>
