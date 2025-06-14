@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Car Runner Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #222; }
+    canvas { display: block; margin: 0 auto; background: #333; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="1200" height="600"></canvas>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const carImg = new Image();
+    let carImgLoaded = false;
+    carImg.src = "car.png";
+    carImg.onload = () => {
+      carImgLoaded = true;
+    };
+
+    let roadOffset = 0;
+
+    const car = {
+      x: 400,
+      y: 450,
+      width: 120,
+      height: 45,
+      color: "skyblue",
+      dy: 0,
+      onGround: true
+    };
+
+    let carFrame = 0;
+
+    const gravity = 0.5;
+    const jumpStrength = -17;
+    let obstacles = [];
+    let obstacleTimer = 0;
+    let score = 0;
+    let speed = 3;
+    let gameOver = false;
+
+    function drawCar() {
+      if (carImgLoaded) {
+        ctx.drawImage(carImg, car.x, car.y - 15, car.width, car.height + 15);
+      }
+
+      const wheelRadius = 10;
+      const wheelOffsetY = car.y + car.height;
+      const leftWheelX = car.x + 22;
+      const rightWheelX = car.x + car.width - 22;
+      const angle = (carFrame * 0.3) % (2 * Math.PI);
+
+      ctx.fillStyle = "black";
+      drawWheel(leftWheelX, wheelOffsetY, wheelRadius, angle);
+      drawWheel(rightWheelX, wheelOffsetY, wheelRadius, angle);
+    }
+
+    function drawWheel(x, y, radius, angle) {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "gray";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + radius * Math.cos(angle + Math.PI), y + radius * Math.sin(angle + Math.PI));
+      ctx.stroke();
+    }
+
+    function drawRoad() {
+      const roadHeight = 60;
+      roadOffset -= speed * 1.5;
+      if (roadOffset <= -60) roadOffset = 0;
+
+      ctx.fillStyle = "#555";
+      for (let i = 0; i < canvas.width / 60 + 2; i++) {
+        ctx.fillRect(i * 60 + roadOffset, 510, 30, roadHeight);
+      }
+    }
+
+    function drawObstacles() {
+      for (let obs of obstacles) {
+        if (obs.type === "tree") {
+          const trunkHeight = obs.height * (0.3 + 0.4 * (obs.trunkRandom || 0.5)); // vary between 30% to 70% of height
+          const trunkWidth = 10;
+          const trunkX = obs.x + obs.width / 2 - trunkWidth / 2;
+          const trunkY = obs.y + obs.height - trunkHeight;
+
+          // Draw trunk
+          ctx.fillStyle = "#8B4513"; // brown
+          ctx.fillRect(trunkX, trunkY, trunkWidth, trunkHeight);
+
+          // Draw foliage as circles, scaled to trunk and height
+          ctx.fillStyle = "#2e8b57"; // dark green
+          const foliageRadius1 = obs.height * 0.3;
+          const foliageRadius2 = obs.height * 0.25;
+          const foliageRadius3 = obs.height * 0.2;
+
+          ctx.beginPath();
+          ctx.arc(obs.x + obs.width / 2, trunkY, foliageRadius1, 0, Math.PI * 2);
+          ctx.arc(obs.x + obs.width / 2 - foliageRadius2, trunkY + foliageRadius2 * 0.3, foliageRadius2, 0, Math.PI * 2);
+          ctx.arc(obs.x + obs.width / 2 + foliageRadius2, trunkY + foliageRadius2 * 0.3, foliageRadius2, 0, Math.PI * 2);
+          ctx.arc(obs.x + obs.width / 2, trunkY - foliageRadius3 * 0.8, foliageRadius3, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (obs.type === "cloud") {
+          ctx.fillStyle = "#ddd";
+          ctx.beginPath();
+          ctx.arc(obs.x + 20, obs.y + 20, 20, 0, Math.PI * 2);
+          ctx.arc(obs.x + 40, obs.y + 10, 30, 0, Math.PI * 2);
+          ctx.arc(obs.x + 70, obs.y + 20, 20, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function updateObstacles() {
+      for (let obs of obstacles) {
+        obs.x -= speed * 1.5;
+      }
+      obstacles = obstacles.filter(obs => obs.x + 60 > 0);
+
+      obstacleTimer--;
+      if (obstacleTimer <= 0) {
+        const isTree = Math.random() < 0.5;
+        if (isTree) {
+          const height = 80 + Math.random() * 120; // range 80 to 200
+          const y = 570 - height;
+          obstacles.push({ x: canvas.width, y: y, width: 60, height, type: "tree", trunkRandom: Math.random() });
+        } else {
+          obstacles.push({ x: canvas.width, y: 180 + Math.random() * 60, width: 90, height: 50, type: "cloud" });
+        }
+        obstacleTimer = 60 + Math.random() * 80;
+      }
+    }
+
+    function checkCollision() {
+      for (let obs of obstacles) {
+        const buffer = 20; // reduce hitbox padding
+        if (
+          car.x < obs.x + obs.width - buffer &&
+          car.x + car.width > obs.x + buffer &&
+          car.y < obs.y + obs.height - buffer &&
+          car.y + car.height > obs.y + buffer
+        ) {
+          gameOver = true;
+        }
+      }
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = "white";
+      ctx.font = "40px Arial";
+      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
+      ctx.font = "20px Arial";
+      ctx.fillText("Press 'R' to restart", canvas.width / 2 - 100, canvas.height / 2 + 40);
+    }
+
+    function update() {
+      carFrame++;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawRoad();
+      drawCar();
+      drawObstacles();
+
+      if (!gameOver) {
+        car.dy += gravity;
+        car.y += car.dy;
+
+        if (car.y >= 450) {
+          car.y = 450;
+          car.dy = 0;
+          car.onGround = true;
+        }
+
+        updateObstacles();
+        checkCollision();
+        score += 0.1;
+
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText("Score: " + Math.floor(score), 10, 30);
+
+        requestAnimationFrame(update);
+      } else {
+        drawGameOver();
+      }
+    }
+
+    function restartGame() {
+      car.x = 100;
+      car.y = 450;
+      car.dy = 0;
+      car.onGround = true;
+      obstacles = [];
+      obstacleTimer = 0;
+      score = 0;
+      gameOver = false;
+      update();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" && car.onGround && !gameOver) {
+        car.dy = jumpStrength;
+        car.onGround = false;
+      } else if (e.key === "ArrowRight" && !gameOver) {
+        car.x += 10;
+      } else if (e.key === "ArrowLeft" && !gameOver) {
+        car.x -= 10;
+      } else if (e.key === "r" || e.key === "R") {
+        if (gameOver) restartGame();
+      }
+    });
+
+    update();
+  </script>
+</body>
+</html>
