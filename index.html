@@ -7,32 +7,10 @@
   <style>
     body { margin: 0; overflow: hidden; background: #222; }
     canvas { display: block; margin: 0 auto; background: #333; }
-    #touchControls {
-      position: fixed;
-      bottom: 20px;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      z-index: 10;
-    }
-    #touchControls button {
-      font-size: 24px;
-      padding: 15px 25px;
-      border-radius: 12px;
-      border: none;
-      background-color: #444;
-      color: white;
-    }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-  <div id="touchControls">
-    <button id="leftBtn">◀️</button>
-    <button id="jumpBtn">🔼</button>
-    <button id="rightBtn">▶️</button>
-  </div>
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -46,7 +24,7 @@
 
     const carImg = new Image();
     let carImgLoaded = false;
-    carImg.src = "car.png";
+    carImg.src = "car3.png";
     carImg.onload = () => {
       carImgLoaded = true;
     };
@@ -66,7 +44,7 @@
     let carFrame = 0;
 
     const gravity = 0.5;
-    const jumpStrength = -17;
+    const jumpStrength = -19;
     let obstacles = [];
     let obstacleTimer = 0;
     let score = 0;
@@ -85,22 +63,6 @@
       const angle = (carFrame * 0.3) % (2 * Math.PI);
 
       ctx.fillStyle = "black";
-      drawWheel(leftWheelX, wheelOffsetY, wheelRadius, angle);
-      drawWheel(rightWheelX, wheelOffsetY, wheelRadius, angle);
-    }
-
-    function drawWheel(x, y, radius, angle) {
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "gray";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
-      ctx.moveTo(x, y);
-      ctx.lineTo(x + radius * Math.cos(angle + Math.PI), y + radius * Math.sin(angle + Math.PI));
-      ctx.stroke();
     }
 
     function drawRoad() {
@@ -235,58 +197,29 @@
       update();
     }
 
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp" && car.onGround && !gameOver) {
+    function handleJump() {
+      if (car.onGround && !gameOver) {
         car.dy = jumpStrength;
         car.onGround = false;
-      } else if (e.key === "ArrowRight" && !gameOver) {
-        car.x += 10;
-      } else if (e.key === "ArrowLeft" && !gameOver) {
-        car.x -= 10;
+      }
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.key === " " || e.key === "Spacebar") && car.onGround && !gameOver) {
+        handleJump();
       } else if (e.key === "r" || e.key === "R") {
         if (gameOver) restartGame();
       }
     });
 
-    function setupTouchControls() {
-      const left = document.getElementById("leftBtn");
-      const right = document.getElementById("rightBtn");
-      const jump = document.getElementById("jumpBtn");
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      handleJump();
+    }, { passive: false });
 
-      const activate = (action) => (e) => {
-        e.preventDefault();
-        action();
-      };
-
-      left.addEventListener("touchstart", activate(() => {
-        if (!gameOver) car.x -= 10;
-      }));
-      left.addEventListener("click", activate(() => {
-        if (!gameOver) car.x -= 10;
-      }));
-
-      right.addEventListener("touchstart", activate(() => {
-        if (!gameOver) car.x += 10;
-      }));
-      right.addEventListener("click", activate(() => {
-        if (!gameOver) car.x += 10;
-      }));
-
-      jump.addEventListener("touchstart", activate(() => {
-        if (car.onGround && !gameOver) {
-          car.dy = jumpStrength;
-          car.onGround = false;
-        }
-      }));
-      jump.addEventListener("click", activate(() => {
-        if (car.onGround && !gameOver) {
-          car.dy = jumpStrength;
-          car.onGround = false;
-        }
-      }));
-    }
-
-    setupTouchControls();
+    canvas.addEventListener("click", () => {
+      handleJump();
+    });
 
     update();
   </script>
