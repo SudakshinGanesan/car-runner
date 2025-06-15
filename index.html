@@ -12,6 +12,31 @@
 <body>
   <canvas id="gameCanvas"></canvas>
   <script>
+    /*
+      --- AMBITIOUS UPGRADE PLAN ---
+      1. Visuals:
+        - Parallax background layers (sky, hills, trees)
+        - Animated sprite for car and wheels
+        - Particle effects (dust when jumping/landing)
+
+      2. Physics:
+        - Realistic gravity with variable jump power
+        - Smooth acceleration and friction
+        - Curved hills and terrain physics
+
+      3. Gameplay:
+        - Procedural terrain generation
+        - Boost pickups and fuel management
+        - Obstacles with physics-based interactions
+        - Scoring system with multipliers
+        - Lives or health system
+
+      4. UI and Experience:
+        - Start screen, pause, and game over transitions
+        - Touch and keyboard input support
+        - Adaptive difficulty scaling with speed
+        - Local high score storage
+    */
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
@@ -31,6 +56,9 @@
 
     let roadOffset = 0;
 
+    // Particle array for dust effects
+    let particles = [];
+
     const car = {
       x: 400,
       y: 450,
@@ -44,12 +72,31 @@
     let carFrame = 0;
 
     const gravity = 0.5;
-    const jumpStrength = -19;
+    const jumpStrength = -15;
     let obstacles = [];
     let obstacleTimer = 0;
     let score = 0;
     let speed = 3;
     let gameOver = false;
+
+    function drawBackground() {
+      // Sky gradient
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      skyGradient.addColorStop(0, "#87CEEB");
+      skyGradient.addColorStop(1, "#ffffff");
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Distant hills
+      ctx.fillStyle = "#91c483";
+      for (let i = 0; i < canvas.width; i += 100) {
+        const offset = (roadOffset * 0.3) % 200;
+        ctx.beginPath();
+        ctx.arc(i + offset, canvas.height - 120, 100, 0, Math.PI, true);
+        ctx.fill();
+      }
+
+    }
 
     function drawCar() {
       if (carImgLoaded) {
@@ -111,6 +158,34 @@
       }
     }
 
+    // Draw dust particles
+    function drawParticles() {
+      for (let p of particles) {
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+    }
+
+    // Spawn dust particles at (x, y)
+    function spawnDust(x, y) {
+      for (let i = 0; i < 10; i++) {
+        particles.push({
+          x: x + Math.random() * 30 - 15,
+          y: y + Math.random() * 5,
+          radius: 2 + Math.random() * 2,
+          dx: (Math.random() - 0.5) * 2,
+          dy: -Math.random() * 1.5,
+          alpha: 1.0,
+          decay: 0.02,
+          color: "#ccc"
+        });
+      }
+    }
+
     function updateObstacles() {
       for (let obs of obstacles) {
         obs.x -= speed * 1.5;
@@ -153,23 +228,58 @@
       ctx.fillText("Press 'R' to restart", canvas.width / 2 - 100, canvas.height / 2 + 40);
     }
 
+    let jumpHoldTime = 0;
+    const maxJumpHold = 15; // max frames to hold jump
+    let jumping = false;
+
+    function handleJumpStart() {
+      if (car.onGround && !gameOver) {
+        car.dy = jumpStrength;
+        car.onGround = false;
+        jumping = true;
+        jumpHoldTime = 0;
+      }
+    }
+
+    function handleJumpEnd() {
+      jumping = false;
+    }
+
     function update() {
       carFrame++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBackground();
       drawRoad();
       drawCar();
       drawObstacles();
+      drawParticles();
 
       if (!gameOver) {
         car.dy += gravity;
+        if (jumping && jumpHoldTime < maxJumpHold) {
+          car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
+          jumpHoldTime++;
+        }
+        // Particle landing detection
+        const previousY = car.y;
         car.y += car.dy;
-
         const groundY = canvas.height - 150;
         if (car.y >= groundY) {
+          if (!car.onGround && previousY < groundY) {
+            spawnDust(car.x + car.width / 2, groundY + car.height / 2);
+          }
           car.y = groundY;
           car.dy = 0;
           car.onGround = true;
         }
+
+        // Update particles
+        for (let p of particles) {
+          p.x += p.dx;
+          p.y += p.dy;
+          p.alpha -= p.decay;
+        }
+        particles = particles.filter(p => p.alpha > 0);
 
         updateObstacles();
         checkCollision();
@@ -194,31 +304,37 @@
       obstacleTimer = 0;
       score = 0;
       gameOver = false;
+      particles = [];
       update();
-    }
-
-    function handleJump() {
-      if (car.onGround && !gameOver) {
-        car.dy = jumpStrength;
-        car.onGround = false;
-      }
     }
 
     document.addEventListener("keydown", (e) => {
       if ((e.key === " " || e.key === "Spacebar") && car.onGround && !gameOver) {
-        handleJump();
+        handleJumpStart();
       } else if (e.key === "r" || e.key === "R") {
         if (gameOver) restartGame();
       }
     });
 
+    document.addEventListener("keyup", (e) => {
+      if (e.key === " " || e.key === "Spacebar") {
+        handleJumpEnd();
+      }
+    });
+
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
-      handleJump();
+      handleJumpStart();
+    }, { passive: false });
+
+    canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      handleJumpEnd();
     }, { passive: false });
 
     canvas.addEventListener("click", () => {
-      handleJump();
+      handleJumpStart();
+      setTimeout(handleJumpEnd, 100); // quick tap simulates short jump
     });
 
     update();
