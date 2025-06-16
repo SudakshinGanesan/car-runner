@@ -53,7 +53,7 @@
       x: 400 * scale,
       y: 450 * scale,
       width: 120 * scale,
-      height: 45 * scale,
+      height: 80 * scale,
       color: "skyblue",
       dy: 0,
       onGround: true
