@@ -52,7 +52,7 @@
     const car = {
       x: 400 * scale,
       y: 450 * scale,
-      width: 120 * scale,
+      width: 150 * scale,
       height: 80 * scale,
       color: "skyblue",
       dy: 0,
