@@ -47,6 +47,7 @@
 
     // Particle array for dust effects
     let particles = [];
+    let floatingTexts = [];
 
     const car = {
       x: 400 * scale,
@@ -61,29 +62,32 @@
     let carFrame = 0;
 
     const gravity = 0.5;
-    const jumpStrength = -15 * scale;
+    const jumpStrength = -12 * scale;
     let obstacles = [];
     let obstacleTimer = 0;
 let score = 0;
 let highScore = parseInt(localStorage.getItem("highScore")) || 0;
 let health = 100;
+let fuel = 100;
+let fuelTimer = 0;
     let speed = 3;
 
     function drawBackground() {
-      // Sky gradient
-      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      skyGradient.addColorStop(0, "#87CEEB");
-      skyGradient.addColorStop(1, "#ffffff");
-      ctx.fillStyle = skyGradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Sunset gradient
+  const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  skyGradient.addColorStop(0, "#FF5F6D"); // warm pinkish-orange
+  skyGradient.addColorStop(0.5, "#FFC371"); // soft orange
+  skyGradient.addColorStop(1, "#2C3E50"); // dark blue-purple near horizon
+  ctx.fillStyle = skyGradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Distant hills
-      ctx.fillStyle = "#91c483";
-      for (let i = 0; i < canvas.width; i += 100) {
-        const offset = (roadOffset * 0.3) % 200;
-        ctx.beginPath();
-        ctx.arc(i + offset, canvas.height - 120, 100, 0, Math.PI, true);
-        ctx.fill();
+  // Distant hills with darker warm tones
+  ctx.fillStyle = "#6E4A35"; // warm brownish
+  for (let i = 0; i < canvas.width; i += 100) {
+    const offset = (roadOffset * 0.3) % 200;
+    ctx.beginPath();
+    ctx.arc(i + offset, canvas.height - 120, 100, 0, Math.PI, true);
+    ctx.fill();
       }
 
     }
@@ -103,7 +107,7 @@ let health = 100;
     }
 
     function drawRoad() {
-      const roadHeight = 60 * scale;
+      const roadHeight = 110 * scale;
       roadOffset -= speed * 1.5;
       if (roadOffset <= -60 * scale) roadOffset = 0;
 
@@ -147,6 +151,13 @@ let health = 100;
           ctx.arc(obs.x + 70, obs.y + 20, 20, 0, Math.PI * 2);
           ctx.fill();
         }
+        else if (obs.type === "fuel") {
+          ctx.font = `${Math.floor(obs.height)}px Arial`;
+          ctx.fillStyle = "yellow";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("⛽", obs.x + obs.width / 2, obs.y + obs.height / 2);
+        }
       }
     }
 
@@ -160,6 +171,19 @@ let health = 100;
         ctx.fill();
       }
       ctx.globalAlpha = 1.0;
+    }
+
+    function drawFloatingTexts() {
+      for (let ft of floatingTexts) {
+        ctx.globalAlpha = ft.alpha;
+        ctx.fillStyle = "yellow";
+        ctx.font = "18px Arial";
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ft.y += ft.dy;
+        ft.alpha -= 0.01;
+      }
+      ctx.globalAlpha = 1.0;
+      floatingTexts = floatingTexts.filter(ft => ft.alpha > 0);
     }
 
     // Spawn dust particles at (x, y)
@@ -191,6 +215,8 @@ let health = 100;
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
           obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
+        } else if (Math.random() < 0.2) {
+          obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
         } else {
           obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
         }
@@ -214,6 +240,17 @@ let health = 100;
               gameState = "gameover";
             }
           }
+          else if (obs.type === "fuel" && !obs.hit) {
+            obs.hit = true;
+            fuel = Math.min(100, fuel + 25);
+            floatingTexts.push({
+              text: "+25% Fuel",
+              x: obs.x,
+              y: obs.y,
+              alpha: 1.0,
+              dy: -0.5
+            });
+          }
         }
       }
     }
@@ -222,9 +259,9 @@ let health = 100;
       ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "white";
-      ctx.font = "40px Arial";
+      ctx.font = "40px 'Press Start 2P', monospace";
       ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2 - 20);
-      ctx.font = "20px Arial";
+      ctx.font = "20px 'Press Start 2P', monospace";
       ctx.fillText("Press 'R' to restart", canvas.width / 2 - 100, canvas.height / 2 + 20);
     }
 
@@ -232,9 +269,9 @@ let health = 100;
       ctx.fillStyle = "#222";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "white";
-      ctx.font = "40px Arial";
+      ctx.font = "40px 'Press Start 2P', monospace";
       ctx.fillText("Car Runner", canvas.width / 2 - 110, canvas.height / 2 - 20);
-      ctx.font = "20px Arial";
+      ctx.font = "20px 'Press Start 2P', monospace";
       ctx.fillText("Press Space or Tap to Start", canvas.width / 2 - 130, canvas.height / 2 + 20);
     }
 
@@ -279,14 +316,15 @@ let health = 100;
       drawCar();
       drawObstacles();
       drawParticles();
+      drawFloatingTexts();
 
       if (gameState === "paused") {
         ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
-        ctx.font = "40px Arial";
+        ctx.font = "40px 'Press Start 2P', monospace";
         ctx.fillText("Paused", canvas.width / 2 - 70, canvas.height / 2 - 20);
-        ctx.font = "20px Arial";
+        ctx.font = "20px 'Press Start 2P', monospace";
         ctx.fillText("Press 'P' to resume", canvas.width / 2 - 100, canvas.height / 2 + 20);
         return;
       }
@@ -325,12 +363,19 @@ let health = 100;
       if (score > 0 && Math.floor(score) % 100 === 0) {
         speed += 0.1;
       }
+      fuelTimer++;
+      if (fuelTimer % 5 === 0) fuel -= 0.1;
+      if (fuel <= 0) {
+        fuel = 0;
+        gameState = "gameover";
+      }
 
       ctx.fillStyle = "white";
-      ctx.font = "20px Arial";
+      ctx.font = "20px 'Press Start 2P', monospace";
       ctx.fillText("Score: " + Math.floor(score), 10, 30);
       ctx.fillText("High Score: " + highScore, 10, 55);
       ctx.fillText("Health: " + health + "%", 10, 80);
+      ctx.fillText("Fuel: " + Math.floor(fuel) + "%", 10, 105);
 
       requestAnimationFrame(update);
     }
@@ -341,6 +386,7 @@ let health = 100;
         localStorage.setItem("highScore", highScore);
       }
       health = 100;
+      fuel = 100;
       car.x = 100 * scale;
       car.y = canvas.height - 150 * scale;
       car.dy = 0;
