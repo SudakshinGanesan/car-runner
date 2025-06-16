@@ -46,6 +46,7 @@
     }
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
+    let scale = canvas.width / 1200;
 
     const carImg = new Image();
     let carImgLoaded = false;
@@ -56,14 +57,16 @@
 
     let roadOffset = 0;
 
+    let gameState = "start"; // "start", "playing", "paused", "gameover"
+
     // Particle array for dust effects
     let particles = [];
 
     const car = {
-      x: 400,
-      y: 450,
-      width: 120,
-      height: 45,
+      x: 400 * scale,
+      y: 450 * scale,
+      width: 120 * scale,
+      height: 45 * scale,
       color: "skyblue",
       dy: 0,
       onGround: true
@@ -72,12 +75,11 @@
     let carFrame = 0;
 
     const gravity = 0.5;
-    const jumpStrength = -15;
+    const jumpStrength = -15 * scale;
     let obstacles = [];
     let obstacleTimer = 0;
     let score = 0;
     let speed = 3;
-    let gameOver = false;
 
     function drawBackground() {
       // Sky gradient
@@ -113,13 +115,13 @@
     }
 
     function drawRoad() {
-      const roadHeight = 60;
+      const roadHeight = 60 * scale;
       roadOffset -= speed * 1.5;
-      if (roadOffset <= -60) roadOffset = 0;
+      if (roadOffset <= -60 * scale) roadOffset = 0;
 
       ctx.fillStyle = "#555";
-      for (let i = 0; i < canvas.width / 60 + 2; i++) {
-        ctx.fillRect(i * 60 + roadOffset, canvas.height - 60, 30, roadHeight);
+      for (let i = 0; i < canvas.width / (60 * scale) + 2; i++) {
+        ctx.fillRect(i * 60 * scale + roadOffset, canvas.height - roadHeight, 30 * scale, roadHeight);
       }
     }
 
@@ -190,17 +192,17 @@
       for (let obs of obstacles) {
         obs.x -= speed * 1.5;
       }
-      obstacles = obstacles.filter(obs => obs.x + 60 > 0);
+      obstacles = obstacles.filter(obs => obs.x + 60 * scale > 0);
 
       obstacleTimer--;
       if (obstacleTimer <= 0) {
         const isTree = Math.random() < 0.5;
         if (isTree) {
-          const height = 80 + Math.random() * 120; // range 80 to 200
-          const y = canvas.height - 30 - height;
-          obstacles.push({ x: canvas.width, y: y, width: 60, height, type: "tree", trunkRandom: Math.random() });
+          const height = (80 + Math.random() * 120) * scale;
+          const y = canvas.height - 30 * scale - height;
+          obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random() });
         } else {
-          obstacles.push({ x: canvas.width, y: 180 + Math.random() * 60, width: 90, height: 50, type: "cloud" });
+          obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
         }
         obstacleTimer = 60 + Math.random() * 80;
       }
@@ -215,17 +217,29 @@
           car.y < obs.y + obs.height - buffer &&
           car.y + car.height > obs.y + buffer
         ) {
-          gameOver = true;
+          gameState = "gameover";
         }
       }
     }
 
     function drawGameOver() {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "white";
       ctx.font = "40px Arial";
-      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2);
+      ctx.fillText("Game Over", canvas.width / 2 - 120, canvas.height / 2 - 20);
       ctx.font = "20px Arial";
-      ctx.fillText("Press 'R' to restart", canvas.width / 2 - 100, canvas.height / 2 + 40);
+      ctx.fillText("Press 'R' to restart", canvas.width / 2 - 100, canvas.height / 2 + 20);
+    }
+
+    function drawStartScreen() {
+      ctx.fillStyle = "#222";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "white";
+      ctx.font = "40px Arial";
+      ctx.fillText("Car Runner", canvas.width / 2 - 110, canvas.height / 2 - 20);
+      ctx.font = "20px Arial";
+      ctx.fillText("Press Space or Tap to Start", canvas.width / 2 - 130, canvas.height / 2 + 20);
     }
 
     let jumpHoldTime = 0;
@@ -233,7 +247,7 @@
     let jumping = false;
 
     function handleJumpStart() {
-      if (car.onGround && !gameOver) {
+      if (car.onGround && gameState === "playing") {
         car.dy = jumpStrength;
         car.onGround = false;
         jumping = true;
@@ -249,82 +263,119 @@
       carFrame++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawBackground();
+
+      if (gameState === "start") {
+        drawStartScreen();
+        return;
+      }
+
+      if (gameState === "gameover") {
+        drawRoad();
+        drawCar();
+        drawObstacles();
+        drawParticles();
+        drawGameOver();
+        return;
+      }
+
+      // "playing" or "paused"
       drawRoad();
       drawCar();
       drawObstacles();
       drawParticles();
 
-      if (!gameOver) {
-        car.dy += gravity;
-        if (jumping && jumpHoldTime < maxJumpHold) {
-          car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
-          jumpHoldTime++;
-        }
-        // Particle landing detection
-        const previousY = car.y;
-        car.y += car.dy;
-        const groundY = canvas.height - 150;
-        if (car.y >= groundY) {
-          if (!car.onGround && previousY < groundY) {
-            spawnDust(car.x + car.width / 2, groundY + car.height / 2);
-          }
-          car.y = groundY;
-          car.dy = 0;
-          car.onGround = true;
-        }
-
-        // Update particles
-        for (let p of particles) {
-          p.x += p.dx;
-          p.y += p.dy;
-          p.alpha -= p.decay;
-        }
-        particles = particles.filter(p => p.alpha > 0);
-
-        updateObstacles();
-        checkCollision();
-        score += 0.1;
-
+      if (gameState === "paused") {
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
+        ctx.font = "40px Arial";
+        ctx.fillText("Paused", canvas.width / 2 - 70, canvas.height / 2 - 20);
         ctx.font = "20px Arial";
-        ctx.fillText("Score: " + Math.floor(score), 10, 30);
-
-        requestAnimationFrame(update);
-      } else {
-        drawGameOver();
+        ctx.fillText("Press 'P' to resume", canvas.width / 2 - 100, canvas.height / 2 + 20);
+        return;
       }
+
+      // playing
+      car.dy += gravity;
+      if (jumping && jumpHoldTime < maxJumpHold) {
+        car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
+        jumpHoldTime++;
+      }
+      // Particle landing detection
+      const previousY = car.y;
+      car.y += car.dy;
+      const groundY = canvas.height - 150 * scale;
+      if (car.y >= groundY) {
+        if (!car.onGround && previousY < groundY) {
+          spawnDust(car.x + car.width / 2, groundY + car.height / 2);
+        }
+        car.y = groundY;
+        car.dy = 0;
+        car.onGround = true;
+      }
+
+      // Update particles
+      for (let p of particles) {
+        p.x += p.dx;
+        p.y += p.dy;
+        p.alpha -= p.decay;
+      }
+      particles = particles.filter(p => p.alpha > 0);
+
+      updateObstacles();
+      checkCollision();
+      score += 0.1;
+
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText("Score: " + Math.floor(score), 10, 30);
+
+      requestAnimationFrame(update);
     }
 
     function restartGame() {
-      car.x = 100;
-      car.y = canvas.height - 150;
+      car.x = 100 * scale;
+      car.y = canvas.height - 150 * scale;
       car.dy = 0;
       car.onGround = true;
       obstacles = [];
       obstacleTimer = 0;
       score = 0;
-      gameOver = false;
       particles = [];
+      gameState = "playing";
       update();
     }
 
     document.addEventListener("keydown", (e) => {
-      if ((e.key === " " || e.key === "Spacebar") && car.onGround && !gameOver) {
-        handleJumpStart();
+      if ((e.key === " " || e.key === "Spacebar")) {
+        if (gameState === "start") {
+          gameState = "playing";
+          restartGame();
+        } else if (car.onGround && gameState === "playing") {
+          handleJumpStart();
+        }
       } else if (e.key === "r" || e.key === "R") {
-        if (gameOver) restartGame();
+        if (gameState === "gameover") restartGame();
+      } else if (e.key === "p" || e.key === "P") {
+        if (gameState === "playing") gameState = "paused";
+        else if (gameState === "paused") gameState = "playing";
       }
     });
 
     document.addEventListener("keyup", (e) => {
-      if (e.key === " " || e.key === "Spacebar") {
+      if ((e.key === " " || e.key === "Spacebar") && gameState === "playing") {
         handleJumpEnd();
       }
     });
 
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
-      handleJumpStart();
+      if (gameState === "start") {
+        gameState = "playing";
+        restartGame();
+      } else {
+        handleJumpStart();
+      }
     }, { passive: false });
 
     canvas.addEventListener("touchend", (e) => {
@@ -333,8 +384,13 @@
     }, { passive: false });
 
     canvas.addEventListener("click", () => {
-      handleJumpStart();
-      setTimeout(handleJumpEnd, 100); // quick tap simulates short jump
+      if (gameState === "start") {
+        gameState = "playing";
+        restartGame();
+      } else {
+        handleJumpStart();
+        setTimeout(handleJumpEnd, 100); // quick tap simulates short jump
+      }
     });
 
     update();
