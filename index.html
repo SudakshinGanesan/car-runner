@@ -78,7 +78,8 @@
     const jumpStrength = -15 * scale;
     let obstacles = [];
     let obstacleTimer = 0;
-    let score = 0;
+let score = 0;
+let highScore = parseInt(localStorage.getItem("highScore")) || 0;
     let speed = 3;
 
     function drawBackground() {
@@ -325,15 +326,24 @@
       updateObstacles();
       checkCollision();
       score += 0.1;
+      // Increase speed every 100 points
+      if (score > 0 && Math.floor(score) % 100 === 0) {
+        speed += 0.1;
+      }
 
       ctx.fillStyle = "white";
       ctx.font = "20px Arial";
       ctx.fillText("Score: " + Math.floor(score), 10, 30);
+      ctx.fillText("High Score: " + highScore, 10, 55);
 
       requestAnimationFrame(update);
     }
 
     function restartGame() {
+      if (score > highScore) {
+        highScore = Math.floor(score);
+        localStorage.setItem("highScore", highScore);
+      }
       car.x = 100 * scale;
       car.y = canvas.height - 150 * scale;
       car.dy = 0;
