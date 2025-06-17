@@ -52,8 +52,8 @@
     const car = {
       x: 400 * scale,
       y: 450 * scale,
-      width: 150 * scale,
-      height: 80 * scale,
+      width: 180 * scale,
+      height: 100 * scale,
       color: "skyblue",
       dy: 0,
       onGround: true
@@ -80,16 +80,22 @@ let fuelTimer = 0;
   skyGradient.addColorStop(1, "#2C3E50"); // dark blue-purple near horizon
   ctx.fillStyle = skyGradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Distant hills with darker warm tones
-  ctx.fillStyle = "#6E4A35"; // warm brownish
-  for (let i = 0; i < canvas.width; i += 100) {
-    const offset = (roadOffset * 0.3) % 200;
-    ctx.beginPath();
-    ctx.arc(i + offset, canvas.height - 120, 100, 0, Math.PI, true);
-    ctx.fill();
-      }
-
+/*
+  // Distant mountain range
+  ctx.fillStyle = "#6E4A35"; // mountain color
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height);
+  let step = 0;
+  while (step < canvas.width + 100) {
+    const peakX = step + Math.random() * 60 + 40;
+    const peakY = canvas.height - (80 + Math.random() * 60);
+    ctx.lineTo(peakX, peakY);
+    step = peakX + Math.random() * 30 + 30;
+  }
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.closePath();
+  ctx.fill();
+*/
     }
 
     function drawCar() {
@@ -158,6 +164,19 @@ let fuelTimer = 0;
           ctx.textBaseline = "middle";
           ctx.fillText("⛽", obs.x + obs.width / 2, obs.y + obs.height / 2);
         }
+        else if (obs.type === "ufo") {
+          // Draw UFO body
+          ctx.fillStyle = "#b0e0e6";
+          ctx.beginPath();
+          ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, obs.height / 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw UFO base
+          ctx.fillStyle = "#666";
+          ctx.beginPath();
+          ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2 + 5, obs.width * 0.6, 10 * scale, 0, 0, Math.PI);
+          ctx.fill();
+        }
       }
     }
 
@@ -205,20 +224,44 @@ let fuelTimer = 0;
     function updateObstacles() {
       for (let obs of obstacles) {
         obs.x -= speed * 1.5;
+        if (obs.type === "ufo" && obs.dx) {
+          obs.x += obs.dx;
+        }
+        // UFO swoop logic
+        if (obs.type === "ufo" && typeof obs.dy === "number") {
+          if (obs.y < obs.targetY) {
+            obs.y += obs.dy;
+            if (obs.y > obs.targetY) {
+              obs.y = obs.targetY;
+              obs.dy = 0;
+            }
+          }
+        }
       }
       obstacles = obstacles.filter(obs => obs.x + 60 * scale > 0);
 
       obstacleTimer--;
       if (obstacleTimer <= 0) {
-        const isTree = Math.random() < 0.5;
-        if (isTree) {
+        const rand = Math.random();
+        if (rand < 0.4) {
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
           obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
-        } else if (Math.random() < 0.2) {
+        } else if (rand < 0.6) {
           obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
-        } else {
+        } else if (rand < 0.85) {
           obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
+        } else {
+          obstacles.push({
+            x: canvas.width,
+            y: -100 * scale,
+            width: 80 * scale,
+            height: 40 * scale,
+            type: "ufo",
+            dx: -1.5 * scale,
+            dy: 1 + Math.random() * 1.5, // swoop speed
+            targetY: canvas.height - 110 * scale + Math.random() * 20 * scale // closer to ground
+          });
         }
         obstacleTimer = 60 + Math.random() * 80;
       }
@@ -233,7 +276,7 @@ let fuelTimer = 0;
           car.y < obs.y + obs.height - buffer &&
           car.y + car.height > obs.y + buffer
         ) {
-          if (obs.type === "tree" && !obs.hit) {
+          if ((obs.type === "tree" || obs.type === "ufo") && !obs.hit) {
             obs.hit = true;
             health -= 25;
             if (health <= 0) {
