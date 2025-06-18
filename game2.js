@@ -1,8 +1,11 @@
+// Get canvas element and its drawing context
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
+// Scaling factor to adapt the game to window size
 let scale = 1;
 
+// Resize canvas and update scale for responsive design
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -11,7 +14,8 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-// Images
+// --- IMAGE LOADING ---
+// Car image and wheel image for rendering the car
 const carImg = new Image();
 carImg.src = "car3.png";
 let carImgLoaded = false;
@@ -20,95 +24,103 @@ carImg.onload = () => {
 };
 
 const wheelImg = new Image();
-wheelImg.src = "wheel.png"; // Placeholder wheel image
+wheelImg.src = "wheel.png"; // Placeholder wheel image (not used directly)
 
-// Game state variables
-let gameState = "start"; // start, playing, paused, gameover
+// --- GAME STATE VARIABLES ---
+let gameState = "start"; // Possible states: start, playing, paused, gameover
 
-// Parallax layers for background
+// Parallax background layers (for scrolling background effect)
 const bgLayers = [
-  { speed: 0.1, colorStart: "#111e3c", colorEnd: "#273858" }, // distant sky
-  { speed: 0.3, colorStart: "#274753", colorEnd: "#4b6b7a" }, // distant hills
-  { speed: 0.5, colorStart: "#2f5e3f", colorEnd: "#4c824a" }, // near trees
+  { speed: 0.1, colorStart: "#111e3c", colorEnd: "#273858" }, // Distant sky
+  { speed: 0.3, colorStart: "#274753", colorEnd: "#4b6b7a" }, // Distant hills
+  { speed: 0.5, colorStart: "#2f5e3f", colorEnd: "#4c824a" }, // Near trees
 ];
 
+// Horizontal offsets for each background layer (for parallax)
 let bgOffsets = [0, 0, 0];
 
-// Car object with physics
+// Car object with all physics and state
 const car = {
-  x: 150 * scale,
-  y: 0,
-  width: 180 * scale,
-  height: 90 * scale,
-  dy: 0,
-  onGround: true,
-  speed: 0,
-  maxSpeed: 10 * scale,
-  acceleration: 0.2 * scale,
-  friction: 0.05 * scale,
-  health: 100,
-  fuel: 100,
-  shield: 0, // shield time in frames
-  turbo: 0,  // turbo time in frames
-  wheelRotation: 0,
+  x: 150 * scale,             // Horizontal position
+  y: 0,                       // Vertical position
+  width: 180 * scale,         // Car width
+  height: 90 * scale,         // Car height
+  dy: 0,                      // Vertical velocity
+  onGround: true,             // Is the car on the ground?
+  speed: 0,                   // (unused, for future)
+  maxSpeed: 10 * scale,       // Maximum speed (unused)
+  acceleration: 0.2 * scale,  // Acceleration (unused)
+  friction: 0.05 * scale,     // Friction (unused)
+  health: 100,                // Car health
+  fuel: 100,                  // Car fuel
+  shield: 0,                  // Shield duration (frames)
+  turbo: 0,                   // Turbo duration (frames)
+  wheelRotation: 0,           // Wheel rotation for animation
 };
 
-let gravity = 0.6 * scale;
-let jumpStrength = -15 * scale;
+// Physics constants
+let gravity = 0.6 * scale;          // Gravity strength
+let jumpStrength = -15 * scale;     // Upward force when jumping
 
-let particles = [];
-let obstacles = [];
-let pickups = [];
-let floatingTexts = [];
+// --- ARRAYS FOR GAME OBJECTS ---
+let particles = [];       // Array of particle effects (dust, sparks)
+let obstacles = [];       // Array of obstacles (trees, rocks, ufos)
+let pickups = [];         // Array of pickups (fuel, boost, shield)
+let floatingTexts = [];   // Array of floating text feedback
 
-let score = 0;
-let highScore = parseInt(localStorage.getItem("highScore")) || 0;
-let comboMultiplier = 1;
-let comboTimer = 0;
+// --- GAME PROGRESS VARIABLES ---
+let score = 0;                                        // Player score
+let highScore = parseInt(localStorage.getItem("highScore")) || 0; // High score (from localStorage)
+let comboMultiplier = 1;                              // Score combo multiplier
+let comboTimer = 0;                                   // Timer for combo reset
 
-let obstacleTimer = 0;
-let pickupTimer = 0;
-let difficultyTimer = 0;
+let obstacleTimer = 0;        // Timer for spawning obstacles
+let pickupTimer = 0;          // Timer for spawning pickups
+let difficultyTimer = 0;      // Timer for increasing difficulty
 
-let speed = 5 * scale; // base ground scroll speed
+let speed = 5 * scale;        // Base ground scroll speed
 
-// Terrain variables for procedural hills
-const terrainPoints = [];
-const terrainSpacing = 60 * scale;
-const terrainAmplitude = 60 * scale;
-const terrainFrequency = 0.005; // how often hills appear
+// --- TERRAIN GENERATION VARIABLES ---
+const terrainPoints = [];         // Array of points for procedural hills
+const terrainSpacing = 60 * scale;     // Distance between terrain points
+const terrainAmplitude = 60 * scale;   // Height of hills
+const terrainFrequency = 0.005;        // Frequency of hills (how often hills appear)
 
-// Day-night cycle variables
-let dayTime = 0; // 0 to 1 cycle progress
+// --- DAY-NIGHT CYCLE VARIABLES ---
+let dayTime = 0; // Progress of the day-night cycle (0 to 1)
 
-// Controls
-let keys = {};
+// --- INPUT STATE ---
+let keys = {}; // Object to track pressed keys
 
-// Utility: Clamp function
+// --- UTILITY FUNCTIONS ---
+// Clamp a value between min and max
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-// Create terrain points for hills
+// --- TERRAIN GENERATION ---
+// Generate terrain points for procedural hills (called each frame)
 function generateTerrain() {
   terrainPoints.length = 0;
   for (let i = 0; i < canvas.width / terrainSpacing + 10; i++) {
     let x = i * terrainSpacing;
     let y = canvas.height - 150 * scale;
-    // Use sine wave for hills
+    // Sine wave for smooth hills
     y -= Math.sin((x + performance.now() * 0.1) * terrainFrequency) * terrainAmplitude;
     terrainPoints.push({ x, y });
   }
 }
 
-// Draw parallax background layers
+// --- BACKGROUND DRAWING ---
+// Draw parallax sky and background layers (hills, trees)
 function drawParallaxBackground() {
-  dayTime = (dayTime + 0.00005) % 1; // slow day-night cycle
+  dayTime = (dayTime + 0.00005) % 1; // Advance day-night cycle slowly
 
-  // Interpolate colors for sky gradient based on dayTime
-  const dayColors = ["#87CEEB", "#FFD580", "#004466"]; // day sky colors
-  const nightColors = ["#000014", "#440044", "#111122"]; // night sky colors
+  // Interpolate sky gradient colors based on dayTime
+  const dayColors = ["#87CEEB", "#FFD580", "#004466"]; // Day sky colors
+  const nightColors = ["#000014", "#440044", "#111122"]; // Night sky colors
 
+  // Linear interpolation between two hex colors
   function lerpColor(a, b, t) {
     const c1 = parseInt(a.slice(1), 16);
     const c2 = parseInt(b.slice(1), 16);
@@ -124,10 +136,12 @@ function drawParallaxBackground() {
     return `rgb(${r},${g},${blue})`;
   }
 
+  // Calculate sky colors for top, middle, and bottom
   let skyTop = lerpColor(dayColors[0], nightColors[0], Math.abs(dayTime - 0.5) * 2);
   let skyMid = lerpColor(dayColors[1], nightColors[1], Math.abs(dayTime - 0.5) * 2);
   let skyBottom = lerpColor(dayColors[2], nightColors[2], Math.abs(dayTime - 0.5) * 2);
 
+  // Draw sky gradient
   let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, skyTop);
   gradient.addColorStop(0.5, skyMid);
@@ -136,15 +150,17 @@ function drawParallaxBackground() {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw layers (hills, trees) with parallax scroll
+  // Draw parallax background layers (hills, trees)
   for (let i = 0; i < bgLayers.length; i++) {
     const layer = bgLayers[i];
+    // Move background layer offset based on speed and layer's speed
     bgOffsets[i] = (bgOffsets[i] - layer.speed * speed * 0.1) % canvas.width;
 
     ctx.fillStyle = layer.colorStart;
+    // Repeat shapes across the screen for each layer
     for (let x = bgOffsets[i]; x < canvas.width + canvas.width; x += 300 * scale) {
       ctx.beginPath();
-      // Draw simple hills or tree silhouettes
+      // Draw simple triangle shapes for hills/trees
       let baseY = canvas.height - 100 * scale - i * 30 * scale;
       ctx.moveTo(x, canvas.height);
       ctx.lineTo(x + 50 * scale, baseY);
@@ -157,10 +173,11 @@ function drawParallaxBackground() {
 
 // Draw procedural terrain hills
 function drawTerrain() {
-  ctx.fillStyle = "#2e8b57"; // grass green
+  ctx.fillStyle = "#2e8b57"; // Grass green
 
   ctx.beginPath();
   ctx.moveTo(terrainPoints[0].x, canvas.height);
+  // Draw the terrain line using the points
   for (const pt of terrainPoints) {
     ctx.lineTo(pt.x, pt.y);
   }
@@ -188,7 +205,7 @@ function drawRoad() {
   ctx.setLineDash([]);
 }
 
-// Draw the car with animation and effects
+// Draw the car with animation and effects (wheels, shield, turbo flames)
 function drawCar() {
   if (carImgLoaded) {
     ctx.save();
@@ -251,7 +268,7 @@ function drawCar() {
   }
 }
 
-// Draw obstacles with animation
+// Draw all obstacles (trees, rocks, ufos) with animation
 function drawObstacles() {
   for (const obs of obstacles) {
     if (obs.type === "tree") {
@@ -289,7 +306,7 @@ function drawObstacles() {
   }
 }
 
-// Draw pickups (fuel, boost)
+// Draw all pickups (fuel, boost, shield)
 function drawPickups() {
   for (const pu of pickups) {
     if (pu.type === "fuel") {
@@ -314,7 +331,7 @@ function drawPickups() {
   }
 }
 
-// Particle effects for dust and sparks
+// Draw all particle effects (dust, sparks)
 function drawParticles() {
   for (const p of particles) {
     ctx.globalAlpha = p.alpha;
@@ -326,7 +343,7 @@ function drawParticles() {
   ctx.globalAlpha = 1.0;
 }
 
-// Floating texts for feedback
+// Draw all floating texts for feedback (score, power-ups, etc.)
 function drawFloatingTexts() {
   for (const ft of floatingTexts) {
     ctx.globalAlpha = ft.alpha;
@@ -340,7 +357,7 @@ function drawFloatingTexts() {
   floatingTexts = floatingTexts.filter(ft => ft.alpha > 0);
 }
 
-// Spawn dust particles for landing or skid
+// Spawn dust particles at (x, y) (used for landing or collision)
 function spawnDust(x, y) {
   for (let i = 0; i < 10; i++) {
     particles.push({
@@ -356,13 +373,14 @@ function spawnDust(x, y) {
   }
 }
 
-// Update game objects each frame
+// --- MAIN UPDATE LOGIC ---
+// Update all game objects and state each frame
 function updateGameObjects() {
-  // Update terrain points for hills (simulate moving terrain)
+  // Move terrain points left to simulate forward motion
   for (let pt of terrainPoints) {
     pt.x -= speed;
   }
-  // Remove points that go off screen and add new points at end
+  // Remove terrain points that have moved off screen, add new ones at the end
   while (terrainPoints.length && terrainPoints[0].x < -terrainSpacing) {
     terrainPoints.shift();
     let lastX = terrainPoints[terrainPoints.length - 1].x;
@@ -371,11 +389,12 @@ function updateGameObjects() {
     terrainPoints.push({ x: newX, y: newY });
   }
 
-  // Update car physics
-  car.dy += gravity;
-  car.y += car.dy;
+  // --- CAR PHYSICS ---
+  car.dy += gravity; // Apply gravity
+  car.y += car.dy;   // Update vertical position
 
-  // Determine ground height under car by interpolating terrain points
+  // --- COLLISION WITH TERRAIN (GROUND) ---
+  // Find the ground height under the car by interpolating between terrain points
   let groundY = canvas.height;
   for (let i = 0; i < terrainPoints.length - 1; i++) {
     if (car.x >= terrainPoints[i].x && car.x <= terrainPoints[i + 1].x) {
@@ -386,8 +405,10 @@ function updateGameObjects() {
   }
   groundY -= car.height;
 
+  // If car is below ground, snap it to ground and reset jump
   if (car.y > groundY) {
     if (!car.onGround) {
+      // Spawn dust and show landing text if just landed
       spawnDust(car.x + car.width / 2, groundY + car.height);
       floatingTexts.push({ text: "Landing!", x: car.x + car.width / 2, y: groundY, alpha: 1, dy: -0.7, decay: 0.02, color: "white" });
     }
@@ -398,13 +419,13 @@ function updateGameObjects() {
     car.onGround = false;
   }
 
-  // Handle controls for jump
+  // --- JUMPING (CONTROLS) ---
   if ((keys[" "] || keys["ArrowUp"]) && car.onGround) {
     car.dy = jumpStrength;
     car.onGround = false;
   }
 
-  // Move obstacles and pickups to left
+  // --- MOVE OBSTACLES AND PICKUPS LEFTWARD ---
   obstacles.forEach(obs => {
     obs.x -= speed * (obs.speedMultiplier || 1);
   });
@@ -412,15 +433,15 @@ function updateGameObjects() {
     pu.x -= speed * (pu.speedMultiplier || 1);
   });
 
-  // Remove off-screen obstacles/pickups
+  // Remove obstacles/pickups that have moved off screen
   obstacles = obstacles.filter(o => o.x + o.width > 0);
   pickups = pickups.filter(p => p.x + p.size > 0);
 
-  // Spawn obstacles and pickups with timers
+  // --- SPAWN OBSTACLES AND PICKUPS BASED ON TIMERS ---
   obstacleTimer--;
   if (obstacleTimer <= 0) {
     spawnRandomObstacle();
-    obstacleTimer = 90 - Math.min(difficultyTimer, 60); // faster spawn as difficulty increases
+    obstacleTimer = 90 - Math.min(difficultyTimer, 60); // Faster as difficulty increases
   }
   pickupTimer--;
   if (pickupTimer <= 0) {
@@ -428,16 +449,16 @@ function updateGameObjects() {
     pickupTimer = 200 - Math.min(difficultyTimer * 2, 150);
   }
 
-  // Update power-up timers
+  // --- POWER-UP TIMERS ---
   if (car.shield > 0) car.shield--;
   if (car.turbo > 0) {
     car.turbo--;
-    speed = 8 * scale; // turbo speed
+    speed = 8 * scale; // Turbo speed
   } else {
-    speed = 5 * scale + difficultyTimer * 0.02; // base speed with difficulty scaling
+    speed = 5 * scale + difficultyTimer * 0.02; // Base speed + difficulty scaling
   }
 
-  // Update particles
+  // --- PARTICLE UPDATES ---
   particles.forEach(p => {
     p.x += p.dx;
     p.y += p.dy;
@@ -445,13 +466,13 @@ function updateGameObjects() {
   });
   particles = particles.filter(p => p.alpha > 0);
 
-  // Update floating texts
+  // --- FLOATING TEXT UPDATES ---
   drawFloatingTexts();
 
-  // Check collisions
+  // --- COLLISION CHECKS ---
   checkCollisions();
 
-  // Update score and combo
+  // --- SCORE AND COMBO ---
   score += 0.1 * comboMultiplier;
   if (comboTimer > 0) {
     comboTimer--;
@@ -459,7 +480,7 @@ function updateGameObjects() {
     comboMultiplier = 1;
   }
 
-  // Increase difficulty over time
+  // --- INCREASE DIFFICULTY OVER TIME ---
   difficultyTimer++;
 }
 
@@ -537,7 +558,8 @@ function spawnRandomPickup() {
   }
 }
 
-// Check collisions between car and obstacles/pickups
+// --- COLLISION HANDLING ---
+// Check collisions between car and obstacles/pickups and handle effects
 function checkCollisions() {
   const carRect = {
     x: car.x,
@@ -592,7 +614,7 @@ function checkCollisions() {
   }
 }
 
-// Rect intersection helper
+// Rectangle intersection helper (for collision detection)
 function rectIntersect(r1, r2) {
   return !(
     r2.x > r1.x + r1.width ||
@@ -602,7 +624,8 @@ function rectIntersect(r1, r2) {
   );
 }
 
-// Draw UI overlays
+// --- UI DRAWING ---
+// Draw UI overlays (score, health, fuel, power-ups)
 function drawUI() {
   ctx.fillStyle = "white";
   ctx.font = `${20 * scale}px Arial`;
@@ -622,7 +645,8 @@ function drawUI() {
   }
 }
 
-// Start screen
+// --- GAME STATE SCREENS ---
+// Draw start screen UI
 function drawStartScreen() {
   ctx.fillStyle = "#000d1a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -638,7 +662,7 @@ function drawStartScreen() {
   ctx.fillText("Jump: Space / Up Arrow", canvas.width / 2, canvas.height / 2 + 50 * scale);
 }
 
-// Pause screen
+// Draw pause overlay
 function drawPauseScreen() {
   ctx.fillStyle = "rgba(0,0,0,0.5)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -650,7 +674,7 @@ function drawPauseScreen() {
   ctx.fillText("Press P to Resume", canvas.width / 2, canvas.height / 2 + 40 * scale);
 }
 
-// Game over screen
+// Draw game over overlay
 function drawGameOverScreen() {
   ctx.fillStyle = "rgba(0,0,0,0.7)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -665,7 +689,8 @@ function drawGameOverScreen() {
   ctx.fillText("Press R to Restart", canvas.width / 2, canvas.height / 2 + 100 * scale);
 }
 
-// Main game loop
+// --- MAIN GAME LOOP ---
+// Main update/draw loop, runs every animation frame
 function update() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -711,7 +736,8 @@ function update() {
   requestAnimationFrame(update);
 }
 
-// Reset game
+// --- RESET GAME STATE ---
+// Reset all game variables to their initial state
 function restartGame() {
   if (score > highScore) {
     highScore = Math.floor(score);
@@ -737,7 +763,8 @@ function restartGame() {
   gameState = "playing";
 }
 
-// Keyboard controls
+// --- INPUT HANDLING ---
+// Keyboard controls for jump, pause, start, restart
 document.addEventListener("keydown", (e) => {
   keys[e.key] = true;
 
@@ -764,7 +791,7 @@ document.addEventListener("keyup", (e) => {
   keys[e.key] = false;
 });
 
-// Touch controls
+// Touch controls for mobile/touch devices
 canvas.addEventListener("touchstart", (e) => {
   e.preventDefault();
   if (gameState === "start") {
@@ -779,4 +806,5 @@ canvas.addEventListener("touchstart", (e) => {
   }
 }, { passive: false });
 
+// --- START GAME LOOP ---
 update();

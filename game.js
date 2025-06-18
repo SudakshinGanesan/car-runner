@@ -70,7 +70,14 @@ let highScore = parseInt(localStorage.getItem("highScore")) || 0;
 let health = 100;
 let fuel = 100;
 let fuelTimer = 0;
-    let speed = 3;
+let speed = 3;
+
+let shieldActive = false;
+let shieldTimer = 0;
+
+let turboActive = false;
+let turboTimer = 0;
+const turboSpeedMultiplier = 2;
 
     function drawBackground() {
   // Sunset gradient
@@ -177,6 +184,111 @@ let fuelTimer = 0;
           ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2 + 5, obs.width * 0.6, 10 * scale, 0, 0, Math.PI);
           ctx.fill();
         }
+        else if (obs.type === "turbo") {
+          // Only draw custom turbo orb and flames, no bounding box or fillRect
+          const centerX = obs.x + obs.width / 2;
+          const centerY = obs.y + obs.height / 2;
+          const radius = obs.height / 2;
+
+          // Animated flame effect
+          const time = Date.now() * 0.01;
+          const flameOffset = Math.sin(time) * 2;
+
+          // Flame colors gradient
+          const flameGradient = ctx.createRadialGradient(centerX, centerY, radius * 0.3, centerX, centerY, radius * 1.5);
+          flameGradient.addColorStop(0, "rgba(255, 140, 0, 0.9)");
+          flameGradient.addColorStop(0.3, "rgba(255, 69, 0, 0.7)");
+          flameGradient.addColorStop(0.7, "rgba(255, 0, 0, 0.4)");
+          flameGradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+
+          // Draw flame shape (triangles) behind orb, slightly offset to left as exhaust
+          ctx.fillStyle = flameGradient;
+          ctx.beginPath();
+          ctx.moveTo(centerX - radius * 0.7, centerY + flameOffset);
+          ctx.lineTo(centerX - radius * 1.5, centerY - radius * 0.5 + flameOffset);
+          ctx.lineTo(centerX - radius * 1.5, centerY + radius * 0.5 + flameOffset);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(centerX - radius * 1.1, centerY - flameOffset);
+          ctx.lineTo(centerX - radius * 1.8, centerY - radius * 0.3 - flameOffset);
+          ctx.lineTo(centerX - radius * 1.8, centerY + radius * 0.3 - flameOffset);
+          ctx.closePath();
+          ctx.fill();
+
+          // Draw turbo orb with gradient
+          const orbGradient = ctx.createRadialGradient(centerX - radius * 0.3, centerY - radius * 0.3, 0, centerX, centerY, radius);
+          orbGradient.addColorStop(0, "#FFD700"); // bright gold
+          orbGradient.addColorStop(0.7, "#FFA500"); // orange
+          orbGradient.addColorStop(1, "#FF8C00"); // dark orange
+          
+          ctx.fillStyle = orbGradient;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Add glow effect
+          ctx.shadowColor = "#FFD700";
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          // Lightning bolt symbol
+          ctx.fillStyle = "white";
+          ctx.font = `${radius * 1.2}px Arial`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("⚡", centerX, centerY);
+        }
+        else if (obs.type === "shield") {
+          // Only draw custom shield oval and emoji, no bounding box or fillRect
+          const centerX = obs.x + obs.width / 2;
+          const centerY = obs.y + obs.height / 2;
+          const width = obs.width * 1.2;
+          const height = obs.height * 0.7;
+
+          // Animated shield effect
+          const time = Date.now() * 0.005;
+          const pulseScale = 1 + Math.sin(time) * 0.1;
+
+          // Draw cyan translucent oval with white border
+          const shieldGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, height / 2);
+          shieldGradient.addColorStop(0, "rgba(0, 255, 255, 0.8)");
+          shieldGradient.addColorStop(0.7, "rgba(0, 255, 255, 0.4)");
+          shieldGradient.addColorStop(1, "rgba(0, 255, 255, 0.1)");
+          
+          ctx.fillStyle = shieldGradient;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, (width / 2) * pulseScale, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw shield border with glow
+          ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
+          ctx.lineWidth = 3;
+          ctx.shadowColor = "#00FFFF";
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, (width / 2) * pulseScale, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          // Inner white border
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, (width / 2) * pulseScale - 2, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Draw shield emoji inside oval
+          ctx.fillStyle = "white";
+          ctx.font = `${height * 0.8}px Arial`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("🛡️", centerX, centerY);
+        }
       }
     }
 
@@ -243,25 +355,30 @@ let fuelTimer = 0;
       obstacleTimer--;
       if (obstacleTimer <= 0) {
         const rand = Math.random();
-        if (rand < 0.4) {
+        if (rand < 0.35) {
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
           obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
-        } else if (rand < 0.6) {
+        } else if (rand < 0.40) {
           obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
-        } else if (rand < 0.85) {
-          obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
-        } else {
+        } else if (rand < 0.43) {
           obstacles.push({
             x: canvas.width,
-            y: -100 * scale,
-            width: 80 * scale,
-            height: 40 * scale,
-            type: "ufo",
-            dx: -1.5 * scale,
-            dy: 1 + Math.random() * 1.5, // swoop speed
-            targetY: canvas.height - 110 * scale + Math.random() * 20 * scale // closer to ground
+            y: canvas.height - 80 * scale,
+            width: 50 * scale,
+            height: 50 * scale,
+            type: "turbo"
           });
+        } else if (rand < 0.46) {
+          obstacles.push({
+            x: canvas.width,
+            y: canvas.height - 80 * scale,
+            width: 50 * scale,
+            height: 50 * scale,
+            type: "shield"
+          });
+        } else if (rand < 0.75) {
+          obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
         }
         obstacleTimer = 60 + Math.random() * 80;
       }
@@ -278,9 +395,11 @@ let fuelTimer = 0;
         ) {
           if ((obs.type === "tree" || obs.type === "ufo") && !obs.hit) {
             obs.hit = true;
-            health -= 25;
-            if (health <= 0) {
-              gameState = "gameover";
+            if (!shieldActive) {
+              health -= 25;
+              if (health <= 0) {
+                gameState = "gameover";
+              }
             }
           }
           else if (obs.type === "fuel" && !obs.hit) {
@@ -288,6 +407,30 @@ let fuelTimer = 0;
             fuel = Math.min(100, fuel + 25);
             floatingTexts.push({
               text: "+25% Fuel",
+              x: obs.x,
+              y: obs.y,
+              alpha: 1.0,
+              dy: -0.5
+            });
+          }
+          else if (obs.type === "turbo" && !obs.hit) {
+            obs.hit = true;
+            turboActive = true;
+            turboTimer = 300; // 5 seconds at ~60 FPS
+            floatingTexts.push({
+              text: "Turbo Activated!",
+              x: obs.x,
+              y: obs.y,
+              alpha: 1.0,
+              dy: -0.5
+            });
+          }
+          else if (obs.type === "shield" && !obs.hit) {
+            obs.hit = true;
+            shieldActive = true;
+            shieldTimer = 300; // 5 seconds at ~60 FPS
+            floatingTexts.push({
+              text: "Shield Activated!",
               x: obs.x,
               y: obs.y,
               alpha: 1.0,
@@ -335,6 +478,78 @@ let fuelTimer = 0;
       jumping = false;
     }
 
+    function drawCarShieldEffect() {
+      if (!shieldActive) return;
+      const centerX = car.x + car.width / 2;
+      const centerY = car.y + car.height / 2;
+      const radius = Math.max(car.width, car.height) * 0.65;
+      const time = Date.now() * 0.005;
+      const pulseScale = 1 + Math.sin(time) * 0.08;
+
+      // Shield gradient
+      const shieldGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius * pulseScale);
+      shieldGradient.addColorStop(0, "rgba(0,255,255,0.7)");
+      shieldGradient.addColorStop(0.7, "rgba(0,255,255,0.3)");
+      shieldGradient.addColorStop(1, "rgba(0,255,255,0.05)");
+
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = shieldGradient;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * pulseScale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Outer glow
+      ctx.shadowColor = "#00FFFF";
+      ctx.shadowBlur = 16;
+      ctx.strokeStyle = "rgba(0,255,255,0.7)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * pulseScale, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    function drawCarTurboEffect() {
+      if (!turboActive) return;
+      const centerX = car.x + car.width / 2;
+      const centerY = car.y + car.height / 2;
+      const radius = Math.max(car.width, car.height) * 0.45;
+      const time = Date.now() * 0.01;
+      const flameOffset = Math.sin(time) * 3;
+      const flameLen = radius * 1.2;
+
+      // Draw animated flames behind car
+      ctx.save();
+      const flameX = car.x - flameLen * 0.7;
+      const flameY = centerY;
+      const flameGradient = ctx.createRadialGradient(flameX, flameY, radius * 0.2, flameX, flameY, flameLen);
+      flameGradient.addColorStop(0, "rgba(255, 200, 0, 0.8)");
+      flameGradient.addColorStop(0.4, "rgba(255, 100, 0, 0.6)");
+      flameGradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+      ctx.fillStyle = flameGradient;
+      ctx.beginPath();
+      ctx.moveTo(car.x, centerY + flameOffset);
+      ctx.lineTo(car.x - flameLen, centerY - radius * 0.5 + flameOffset);
+      ctx.lineTo(car.x - flameLen, centerY + radius * 0.5 + flameOffset);
+      ctx.closePath();
+      ctx.fill();
+
+      // Draw turbo orb glow around car
+      const orbGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+      orbGradient.addColorStop(0, "#FFD700");
+      orbGradient.addColorStop(0.7, "#FFA500");
+      orbGradient.addColorStop(1, "#FF8C00");
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = orbGradient;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.restore();
+    }
+
     function update() {
       carFrame++;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -357,6 +572,8 @@ let fuelTimer = 0;
       // "playing" or "paused"
       drawRoad();
       drawCar();
+      drawCarShieldEffect();
+      drawCarTurboEffect();
       drawObstacles();
       drawParticles();
       drawFloatingTexts();
@@ -402,10 +619,41 @@ let fuelTimer = 0;
       updateObstacles();
       checkCollision();
       score += 0.1;
-      // Increase speed every 100 points
-      if (score > 0 && Math.floor(score) % 100 === 0) {
-        speed += 0.1;
+
+      // Turbo and shield logic, and speed/visual indicators
+      if (turboActive) {
+        speed = 3 * turboSpeedMultiplier;
+        turboTimer--;
+        if (turboTimer <= 0) {
+          turboActive = false;
+          speed = 3; // reset to base speed (or your variable speed if increased)
+        }
+      } else {
+        // Normal speed increases based on score
+        if (score > 0 && Math.floor(score) % 100 === 0) {
+          speed += 0.1;
+        }
       }
+
+      if (shieldActive) {
+        shieldTimer--;
+        if (shieldTimer <= 0) {
+          shieldActive = false;
+        }
+      }
+
+      // Optional: Visual indicators for active shield or turbo
+      // if (shieldActive) {
+      //   ctx.strokeStyle = "cyan";
+      //   ctx.lineWidth = 5;
+      //   ctx.strokeRect(car.x - 5, car.y - 5, car.width + 10, car.height + 10);
+      // }
+      // if (turboActive) {
+      //   ctx.strokeStyle = "orange";
+      //   ctx.lineWidth = 5;
+      //   ctx.strokeRect(car.x - 10, car.y - 10, car.width + 20, car.height + 20);
+      // }
+
       fuelTimer++;
       if (fuelTimer % 5 === 0) fuel -= 0.1;
       if (fuel <= 0) {
