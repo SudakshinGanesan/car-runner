@@ -290,14 +290,22 @@ const turboSpeedMultiplier = 2;
           ctx.fillText("🛡️", centerX, centerY);
         }
         else if (obs.type === "pothole") {
-          // Draw an irregular black shape (random polygon) on the road, with a light gray jagged outline
+          // Draw a smooth amoeba-like black shape on the road, with a light gray jagged outline
           ctx.save();
-          ctx.beginPath();
-          // Draw using relative points so pothole moves with obs.x, obs.y
           const relPoints = obs.relPoints;
-          ctx.moveTo(obs.x + relPoints[0].x, obs.y + relPoints[0].y);
-          for (let i = 1; i < relPoints.length; i++) {
-            ctx.lineTo(obs.x + relPoints[i].x, obs.y + relPoints[i].y);
+          // Calculate midpoints for smooth curves
+          ctx.beginPath();
+          let len = relPoints.length;
+          for (let i = 0; i < len; i++) {
+            const p1 = relPoints[i];
+            const p2 = relPoints[(i + 1) % len];
+            const midX = obs.x + (p1.x + p2.x) / 2;
+            const midY = obs.y + (p1.y + p2.y) / 2;
+            if (i === 0) {
+              ctx.moveTo(midX, midY);
+            } else {
+              ctx.quadraticCurveTo(obs.x + p1.x, obs.y + p1.y, midX, midY);
+            }
           }
           ctx.closePath();
           // Fill
@@ -391,13 +399,13 @@ const turboSpeedMultiplier = 2;
           // Place pothole so it sits on the road
           const roadHeight = 110 * scale;
           const baseY = canvas.height - roadHeight + 10 * scale;
-          // Generate random polygon points for irregular shape (relative to center)
+          // Generate amoeba points (relative to center)
           const relPoints = [];
-          const numPoints = 7 + Math.floor(Math.random() * 3);
+          const numPoints = 14 + Math.floor(Math.random() * 5); // 14-18 points
           for (let i = 0; i < numPoints; i++) {
-            const angle = (Math.PI * 2 / numPoints) * i + Math.random() * 0.3;
-            const rX = potholeWidth / 2 + (Math.random() - 0.5) * 18 * scale;
-            const rY = potholeHeight / 2 + (Math.random() - 0.5) * 10 * scale;
+            const angle = (Math.PI * 2 / numPoints) * i;
+            const rX = (potholeWidth / 2) * (0.8 + Math.random() * 0.4); // 80%-120% of radius
+            const rY = (potholeHeight / 2) * (0.8 + Math.random() * 0.4);
             relPoints.push({
               x: potholeWidth / 2 + Math.cos(angle) * rX,
               y: potholeHeight / 2 + Math.sin(angle) * rY
@@ -515,9 +523,13 @@ const turboSpeedMultiplier = 2;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "white";
       ctx.font = "40px 'Press Start 2P', monospace";
-      ctx.fillText("Car Runner", canvas.width / 2 - 110, canvas.height / 2 - 20);
+      ctx.fillText("Car Runner", canvas.width / 2 - 110, canvas.height / 2 - 60);
       ctx.font = "20px 'Press Start 2P', monospace";
-      ctx.fillText("Press Space or Tap to Start", canvas.width / 2 - 130, canvas.height / 2 + 20);
+      ctx.fillText("Avoid obstacles and beat the high score!", canvas.width / 2 - 180, canvas.height / 2 - 10);
+      ctx.font = "18px 'Press Start 2P', monospace";
+      ctx.fillText("Press Spacebar or Touch to Jump", canvas.width / 2 - 130, canvas.height / 2 + 30);
+      ctx.font = "16px 'Press Start 2P', monospace";
+      ctx.fillText("Press Space or Tap to Start", canvas.width / 2 - 110, canvas.height / 2 + 60);
     }
 
     let jumpHoldTime = 0;
@@ -720,12 +732,12 @@ const turboSpeedMultiplier = 2;
         gameState = "gameover";
       }
 
+      const infoText = `Score: ${Math.floor(score)}   High Score: ${highScore}   Health: ${health}%   Fuel: ${Math.floor(fuel)}%`;
       ctx.fillStyle = "white";
       ctx.font = "20px 'Press Start 2P', monospace";
-      ctx.fillText("Score: " + Math.floor(score), 10, 30);
-      ctx.fillText("High Score: " + highScore, 10, 55);
-      ctx.fillText("Health: " + health + "%", 10, 80);
-      ctx.fillText("Fuel: " + Math.floor(fuel) + "%", 10, 105);
+      ctx.textAlign = "center";
+      ctx.fillText(infoText, canvas.width / 2, 40);
+      ctx.textAlign = "left";
 
       requestAnimationFrame(update);
     }
