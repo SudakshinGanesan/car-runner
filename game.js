@@ -36,7 +36,7 @@
 
     const carImg = new Image();
     let carImgLoaded = false;
-    carImg.src = "car3.png";
+    carImg.src = "car.png";
     carImg.onload = () => {
       carImgLoaded = true;
     };
