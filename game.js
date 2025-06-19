@@ -108,6 +108,60 @@ let shakeTimer = 0;
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // --- Parallax Mountains ---
+      if (typeof window.mountainOffset === 'undefined') window.mountainOffset = 0;
+      window.mountainOffset -= speed * 0.25;
+      if (window.mountainOffset <= -canvas.width) window.mountainOffset += canvas.width;
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#556b8d';
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(window.mountainOffset + i * canvas.width, canvas.height * 0.7);
+        ctx.lineTo(window.mountainOffset + 200 * scale + i * canvas.width, canvas.height * 0.45);
+        ctx.lineTo(window.mountainOffset + 600 * scale + i * canvas.width, canvas.height * 0.68);
+        ctx.lineTo(window.mountainOffset + 900 * scale + i * canvas.width, canvas.height * 0.5);
+        ctx.lineTo(window.mountainOffset + canvas.width + i * canvas.width, canvas.height * 0.7);
+        ctx.lineTo(window.mountainOffset + i * canvas.width, canvas.height);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+      ctx.restore();
+
+      // --- Animated Birds ---
+      if (typeof window.birds === 'undefined') {
+        window.birds = [];
+        for (let i = 0; i < 5; i++) {
+          window.birds.push({
+            x: Math.random() * canvas.width,
+            y: canvas.height * 0.18 + Math.random() * canvas.height * 0.12,
+            speed: 1.2 + Math.random() * 0.8,
+            wing: Math.random() * Math.PI * 2
+          });
+        }
+      }
+      for (let bird of window.birds) {
+        bird.x += bird.speed * scale;
+        if (bird.x > canvas.width + 40) {
+          bird.x = -40;
+          bird.y = canvas.height * 0.15 + Math.random() * canvas.height * 0.18;
+          bird.speed = 1.2 + Math.random() * 0.8;
+        }
+        bird.wing += 0.2;
+        // Draw bird as a simple flying V
+        ctx.save();
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        let wingSpan = 18 * scale + Math.sin(bird.wing) * 6 * scale;
+        ctx.moveTo(bird.x - wingSpan, bird.y);
+        ctx.lineTo(bird.x, bird.y + 6 * scale);
+        ctx.lineTo(bird.x + wingSpan, bird.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // Sun and moon positions
       const sunRadius = 40 * scale;
       const moonRadius = 30 * scale;
@@ -140,13 +194,13 @@ let shakeTimer = 0;
       ctx.shadowColor = '#B0BEC5';
       ctx.shadowBlur = 20;
       ctx.fill();
-      // Crescent effect
-      ctx.globalCompositeOperation = 'destination-out';
+      // Draw crescent shadow as overlay (not cut-out)
+      ctx.globalAlpha = 0.7 * ((1 - t) * 0.8 + 0.2); // match moon alpha
       ctx.beginPath();
       ctx.arc(moonX + moonRadius * 0.5, moonY - moonRadius * 0.2, moonRadius * 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#232946'; // use night sky color or dark gray
       ctx.shadowBlur = 0;
+      ctx.fill();
       ctx.restore();
     }
 
@@ -170,13 +224,47 @@ let shakeTimer = 0;
 
     function drawRoad() {
       const roadHeight = 110 * scale;
+      const roadY = canvas.height - roadHeight;
+      const roadX = 0;
+      const roadWidth = canvas.width;
       roadOffset -= speed * 1.5;
-      if (roadOffset <= -60 * scale) roadOffset = 0;
+      if (roadOffset <= -60 * scale) roadOffset += 60 * scale;
 
-      ctx.fillStyle = "#555";
-      for (let i = 0; i < canvas.width / (60 * scale) + 2; i++) {
-        ctx.fillRect(i * 60 * scale + roadOffset, canvas.height - roadHeight, 30 * scale, roadHeight);
-      }
+      // Draw road base
+      ctx.fillStyle = '#666';
+      ctx.fillRect(roadX, roadY, roadWidth, roadHeight);
+
+      // Draw yellow dashed lines at top and bottom edges
+      ctx.save();
+      ctx.strokeStyle = '#FFD600';
+      ctx.lineWidth = 5 * scale;
+      ctx.setLineDash([40 * scale, 30 * scale]);
+      let dashOffset = roadOffset % (70 * scale);
+      // Top edge
+      ctx.beginPath();
+      ctx.moveTo(roadX - dashOffset, roadY + 8 * scale);
+      ctx.lineTo(roadX + roadWidth, roadY + 8 * scale);
+      ctx.stroke();
+      // Bottom edge
+      ctx.beginPath();
+      ctx.moveTo(roadX - dashOffset, roadY + roadHeight - 8 * scale);
+      ctx.lineTo(roadX + roadWidth, roadY + roadHeight - 8 * scale);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // Draw white dashed center line
+      ctx.save();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 5 * scale;
+      ctx.setLineDash([50 * scale, 30 * scale]);
+      // Center line
+      ctx.beginPath();
+      ctx.moveTo(roadX - dashOffset, roadY + roadHeight / 2);
+      ctx.lineTo(roadX + roadWidth, roadY + roadHeight / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
 
     function drawObstacles() {
