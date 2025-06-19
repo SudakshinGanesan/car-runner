@@ -924,6 +924,35 @@ let carJerkOffset = 0;
       ctx.fillText(infoText, canvas.width / 2, 40);
       ctx.textAlign = "left";
 
+      // Draw boost timers below game state info
+      let boostY = 70;
+      let boostX = canvas.width / 2;
+      let boostSpacing = 120;
+      let activeBoosts = [];
+      if (shieldActive) activeBoosts.push({ icon: "🛡️", timer: shieldTimer, max: 300 });
+      if (turboActive) activeBoosts.push({ icon: "⚡", timer: turboTimer, max: 300 });
+      if (rocketActive) activeBoosts.push({ icon: "🚀", timer: rocketTimer, max: 600 });
+      if (activeBoosts.length > 0) {
+        ctx.font = "28px Arial";
+        ctx.textAlign = "center";
+        for (let i = 0; i < activeBoosts.length; i++) {
+          let bx = boostX + (i - (activeBoosts.length - 1) / 2) * boostSpacing;
+          ctx.fillText(activeBoosts[i].icon, bx, boostY);
+          // Draw timer bar below icon
+          let barWidth = 60;
+          let barHeight = 8;
+          let pct = Math.max(0, activeBoosts[i].timer / activeBoosts[i].max);
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(bx - barWidth / 2, boostY + 12, barWidth, barHeight);
+          ctx.fillStyle = i === 0 ? "#0ff" : (i === 1 ? "orange" : "#f44");
+          ctx.fillRect(bx - barWidth / 2, boostY + 12, barWidth * pct, barHeight);
+          ctx.strokeStyle = "#222";
+          ctx.strokeRect(bx - barWidth / 2, boostY + 12, barWidth, barHeight);
+          ctx.fillStyle = "white";
+        }
+        ctx.textAlign = "left";
+      }
+
       if (carJerkTimer > 0) {
         carJerkTimer--;
       }
