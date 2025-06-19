@@ -1,4 +1,4 @@
-    /*
+      /*
       --- AMBITIOUS UPGRADE PLAN ---
       1. Visuals:
         - Parallax background layers (sky, hills, trees)
@@ -359,9 +359,9 @@ const turboSpeedMultiplier = 2;
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
           obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
-        } else if (rand < 0.40) {
+        } else if (rand < 0.45) {
           obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
-        } else if (rand < 0.43) {
+        } else if (rand < 0.50) {
           obstacles.push({
             x: canvas.width,
             y: canvas.height - 80 * scale,
@@ -369,7 +369,7 @@ const turboSpeedMultiplier = 2;
             height: 50 * scale,
             type: "turbo"
           });
-        } else if (rand < 0.46) {
+        } else if (rand < 0.55) {
           obstacles.push({
             x: canvas.width,
             y: canvas.height - 80 * scale,
