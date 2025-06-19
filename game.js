@@ -87,30 +87,67 @@ let keys = {};
 let carJerkTimer = 0;
 let carJerkOffset = 0;
 
+let dayTime = 0; // 0 to 1, cycles day to night
+
+let shakeX = 0;
+let shakeY = 0;
+let shakeTimer = 0;
+
     function drawBackground() {
-  // Sunset gradient
-  const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  skyGradient.addColorStop(0, "#FF5F6D"); // warm pinkish-orange
-  skyGradient.addColorStop(0.5, "#FFC371"); // soft orange
-  skyGradient.addColorStop(1, "#2C3E50"); // dark blue-purple near horizon
-  ctx.fillStyle = skyGradient;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-/*
-  // Distant mountain range
-  ctx.fillStyle = "#6E4A35"; // mountain color
-  ctx.beginPath();
-  ctx.moveTo(0, canvas.height);
-  let step = 0;
-  while (step < canvas.width + 100) {
-    const peakX = step + Math.random() * 60 + 40;
-    const peakY = canvas.height - (80 + Math.random() * 60);
-    ctx.lineTo(peakX, peakY);
-    step = peakX + Math.random() * 30 + 30;
-  }
-  ctx.lineTo(canvas.width, canvas.height);
-  ctx.closePath();
-  ctx.fill();
-*/
+      // Day-night gradient
+      // dayTime: 0 (sunrise) -> 0.5 (sunset) -> 1 (next sunrise)
+      let t = (Math.sin(dayTime * Math.PI * 2 - Math.PI / 2) + 1) / 2; // 0 at night, 1 at noon
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      // Interpolate between night and day colors
+      let topColor = t > 0.5 ? '#87ceeb' : '#1a237e'; // blue sky or deep night
+      let midColor = t > 0.5 ? '#ffe082' : '#3949ab'; // warm day or dusk
+      let botColor = t > 0.5 ? '#fffde4' : '#232946'; // pale day or night
+      skyGradient.addColorStop(0, topColor);
+      skyGradient.addColorStop(0.5, midColor);
+      skyGradient.addColorStop(1, botColor);
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Sun and moon positions
+      const sunRadius = 40 * scale;
+      const moonRadius = 30 * scale;
+      const arcY = canvas.height * 0.18;
+      const arcR = canvas.width * 0.38;
+      // Sun moves left to right, moon opposite
+      const sunAngle = Math.PI * 2 * dayTime - Math.PI;
+      const moonAngle = sunAngle + Math.PI;
+      const sunX = canvas.width / 2 + Math.cos(sunAngle) * arcR;
+      const sunY = arcY + Math.sin(sunAngle) * arcR * 0.5;
+      const moonX = canvas.width / 2 + Math.cos(moonAngle) * arcR;
+      const moonY = arcY + Math.sin(moonAngle) * arcR * 0.5;
+      // Draw sun
+      ctx.save();
+      ctx.globalAlpha = t * 0.9 + 0.1;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#FFD600';
+      ctx.shadowColor = '#FFD600';
+      ctx.shadowBlur = 40;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+      // Draw moon
+      ctx.save();
+      ctx.globalAlpha = (1 - t) * 0.8 + 0.2;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#ECEFF1';
+      ctx.shadowColor = '#B0BEC5';
+      ctx.shadowBlur = 20;
+      ctx.fill();
+      // Crescent effect
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(moonX + moonRadius * 0.5, moonY - moonRadius * 0.2, moonRadius * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
 
     function drawCar() {
@@ -583,6 +620,7 @@ let carJerkOffset = 0;
           if ((obs.type === "tree" || obs.type === "ufo" || obs.type === "pothole") && !obs.hit) {
             if (rocketActive && obs.type !== "ufo") continue; // immune to ground obstacles while flying
             obs.hit = true;
+            shakeTimer = 12; // trigger screen shake
             if (obs.type === "tree") {
               obs.falling = true;
               obs.fallAngle = 0;
@@ -774,7 +812,18 @@ let carJerkOffset = 0;
 
     function update() {
       carFrame++;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Apply screen shake
+      if (shakeTimer > 0) {
+        shakeX = (Math.random() - 0.5) * 18 * (shakeTimer / 10);
+        shakeY = (Math.random() - 0.5) * 12 * (shakeTimer / 10);
+        shakeTimer--;
+      } else {
+        shakeX = 0;
+        shakeY = 0;
+      }
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+      ctx.clearRect(-shakeX, -shakeY, canvas.width, canvas.height);
       drawBackground();
 
       if (gameState === "start") {
@@ -957,6 +1006,10 @@ let carJerkOffset = 0;
         carJerkTimer--;
       }
 
+      dayTime += 0.0001; // adjust speed as desired
+      if (dayTime > 1) dayTime -= 1;
+
+      ctx.restore();
       requestAnimationFrame(update);
     }
 
