@@ -1097,6 +1097,19 @@ let shakeTimer = 0;
       dayTime += 0.0001; // adjust speed as desired
       if (dayTime > 1) dayTime -= 1;
 
+      // --- Helper/Tutorial Text ---
+      ctx.font = "18px Arial";
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "right";
+      let tipY = 100;
+      let tipX = canvas.width - 40;
+      if (rocketActive) {
+        ctx.fillText("Use UP/DOWN arrows to fly", tipX, tipY);
+      } else if (car.onGround && gameState === "playing") {
+        ctx.fillText("Press SPACE to jump", tipX, tipY);
+      }
+      ctx.textAlign = "left";
+
       ctx.restore();
       requestAnimationFrame(update);
     }
