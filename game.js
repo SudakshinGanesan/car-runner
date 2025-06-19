@@ -79,6 +79,14 @@ let turboActive = false;
 let turboTimer = 0;
 const turboSpeedMultiplier = 2;
 
+let rocketActive = false;
+let rocketTimer = 0;
+
+let keys = {};
+
+let carJerkTimer = 0;
+let carJerkOffset = 0;
+
     function drawBackground() {
   // Sunset gradient
   const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
@@ -106,8 +114,12 @@ const turboSpeedMultiplier = 2;
     }
 
     function drawCar() {
+      let jerkY = 0;
+      if (carJerkTimer > 0) {
+        jerkY = Math.sin(carJerkTimer * 0.7) * 12 * (carJerkTimer / 10);
+      }
       if (carImgLoaded) {
-        ctx.drawImage(carImg, car.x, car.y - 15, car.width, car.height + 15);
+        ctx.drawImage(carImg, car.x, car.y - 15 + jerkY, car.width, car.height + 15);
       }
 
       const wheelRadius = 10;
@@ -133,6 +145,15 @@ const turboSpeedMultiplier = 2;
     function drawObstacles() {
       for (let obs of obstacles) {
         if (obs.type === "tree") {
+          // Tree fall animation if hit
+          ctx.save();
+          let centerX = obs.x + obs.width / 2;
+          let baseY = obs.y + obs.height;
+          if (obs.falling) {
+            ctx.translate(centerX, baseY);
+            ctx.rotate(obs.fallAngle || 0);
+            ctx.translate(-centerX, -baseY);
+          }
           const trunkHeight = obs.height * (0.3 + 0.4 * (obs.trunkRandom || 0.5)); // vary between 30% to 70% of height
           const trunkWidth = 10;
           const swayX = obs.hit ? Math.sin(Date.now() / 100) * 8 : 0;
@@ -156,6 +177,7 @@ const turboSpeedMultiplier = 2;
           ctx.arc(obs.x + obs.width / 2 + foliageRadius2 + swayX, trunkY + foliageRadius2 * 0.3 + swayY, foliageRadius2, 0, Math.PI * 2);
           ctx.arc(obs.x + obs.width / 2 + swayX, trunkY - foliageRadius3 * 0.8 + swayY, foliageRadius3, 0, Math.PI * 2);
           ctx.fill();
+          ctx.restore();
         } else if (obs.type === "cloud") {
           ctx.fillStyle = "#ddd";
           ctx.beginPath();
@@ -172,17 +194,26 @@ const turboSpeedMultiplier = 2;
           ctx.fillText("⛽", obs.x + obs.width / 2, obs.y + obs.height / 2);
         }
         else if (obs.type === "ufo") {
-          // Draw UFO body
+          // Draw UFO body, with rotation if spinning
+          ctx.save();
+          let centerX = obs.x + obs.width / 2;
+          let centerY = obs.y + obs.height / 2;
+          if (obs.spinning) {
+            ctx.translate(centerX, centerY);
+            ctx.rotate((obs.spinAngle || 0));
+            ctx.translate(-centerX, -centerY);
+          }
           ctx.fillStyle = "#b0e0e6";
           ctx.beginPath();
-          ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2, obs.width / 2, obs.height / 2, 0, 0, Math.PI * 2);
+          ctx.ellipse(centerX, centerY, obs.width / 2, obs.height / 2, 0, 0, Math.PI * 2);
           ctx.fill();
 
           // Draw UFO base
           ctx.fillStyle = "#666";
           ctx.beginPath();
-          ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2 + 5, obs.width * 0.6, 10 * scale, 0, 0, Math.PI);
+          ctx.ellipse(centerX, centerY + 5, obs.width * 0.6, 10 * scale, 0, 0, Math.PI);
           ctx.fill();
+          ctx.restore();
         }
         else if (obs.type === "turbo") {
           // Only draw custom turbo orb and flames, no bounding box or fillRect
@@ -320,6 +351,49 @@ const turboSpeedMultiplier = 2;
           ctx.stroke();
           ctx.restore();
         }
+        else if (obs.type === "rocket") {
+          // Draw rocket booster collectible (red/orange rocket with flame)
+          const centerX = obs.x + obs.width / 2;
+          const centerY = obs.y + obs.height / 2;
+          const radius = obs.height / 2;
+          // Rocket body
+          ctx.save();
+          ctx.fillStyle = "#d32f2f";
+          ctx.beginPath();
+          ctx.ellipse(centerX, centerY, radius * 0.7, radius * 1.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          // Rocket tip
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY - radius * 1.2);
+          ctx.lineTo(centerX - radius * 0.4, centerY - radius * 0.5);
+          ctx.lineTo(centerX + radius * 0.4, centerY - radius * 0.5);
+          ctx.closePath();
+          ctx.fill();
+          // Rocket fins
+          ctx.fillStyle = "#ffa000";
+          ctx.beginPath();
+          ctx.moveTo(centerX - radius * 0.7, centerY + radius * 0.7);
+          ctx.lineTo(centerX - radius * 1.0, centerY + radius * 1.2);
+          ctx.lineTo(centerX - radius * 0.2, centerY + radius * 1.0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(centerX + radius * 0.7, centerY + radius * 0.7);
+          ctx.lineTo(centerX + radius * 1.0, centerY + radius * 1.2);
+          ctx.lineTo(centerX + radius * 0.2, centerY + radius * 1.0);
+          ctx.closePath();
+          ctx.fill();
+          // Flame
+          ctx.fillStyle = "orange";
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY + radius * 1.2);
+          ctx.lineTo(centerX - radius * 0.3, centerY + radius * 1.7);
+          ctx.lineTo(centerX + radius * 0.3, centerY + radius * 1.7);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
       }
     }
 
@@ -380,26 +454,49 @@ const turboSpeedMultiplier = 2;
             }
           }
         }
+        // UFO spin/fly-off logic after hit
+        if (obs.type === "ufo" && obs.spinning) {
+          obs.spinAngle += obs.spinSpeed || 0.2;
+          if (obs.followCar && obs.followTimer > 0) {
+            // Follow car for a short time
+            obs.x = car.x + car.width / 2 + 30 * scale;
+            obs.y = car.y - 20 * scale;
+            obs.followTimer--;
+            if (obs.followTimer <= 0) {
+              obs.followCar = false;
+            }
+          } else {
+            // Fly off diagonally
+            obs.x += 6 * scale;
+            obs.y -= 4 * scale;
+          }
+        }
+        // Tree fall logic after hit
+        if (obs.type === "tree" && obs.falling) {
+          obs.fallAngle += obs.fallSpeed || 0.08;
+          if (obs.fallAngle > Math.PI / 2) {
+            obs.fallAngle = Math.PI / 2;
+            // Optionally, remove tree after it falls
+          }
+        }
       }
       obstacles = obstacles.filter(obs => obs.x + 60 * scale > 0);
 
       obstacleTimer--;
       if (obstacleTimer <= 0) {
         const rand = Math.random();
-        if (rand < 0.25) {
-          // Tree: 25%
+        if (rand < 0.20) {
+          // Tree: 20%
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
-          obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
-        } else if (rand < 0.50) {
-          // Pothole: 25%
+          obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false, falling: false, fallAngle: 0, fallSpeed: 0 });
+        } else if (rand < 0.40) {
+          // Pothole: 20%
           const potholeWidth = 110 * scale + Math.random() * 50 * scale;
           const potholeHeight = 45 * scale + Math.random() * 20 * scale;
           const baseX = canvas.width;
-          // Place pothole so it sits on the road
           const roadHeight = 110 * scale;
           const baseY = canvas.height - roadHeight + 10 * scale;
-          // Generate amoeba points (relative to center)
           const relPoints = [];
           const numPoints = 14 + Math.floor(Math.random() * 5); // 14-18 points
           for (let i = 0; i < numPoints; i++) {
@@ -420,12 +517,30 @@ const turboSpeedMultiplier = 2;
             relPoints,
             hit: false
           });
-        } else if (rand < 0.75) {
-          // Power-up: 25% (split equally)
+        } else if (rand < 0.50) {
+          // UFO: 10%
+          obstacles.push({
+            x: canvas.width,
+            y: 100 * scale + Math.random() * (canvas.height * 0.3),
+            width: 90 * scale,
+            height: 45 * scale,
+            type: "ufo",
+            dx: (Math.random() - 0.5) * 2,
+            dy: 2 + Math.random() * 1,
+            targetY: canvas.height - 200 * scale,
+            hit: false,
+            spinning: false,
+            spinAngle: 0,
+            spinSpeed: 0,
+            followCar: false,
+            followTimer: 0
+          });
+        } else if (rand < 0.80) {
+          // Power-up: 30%
           const powerRand = Math.random();
-          if (powerRand < 1/3) {
+          if (powerRand < 0.09) {
             obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
-          } else if (powerRand < 2/3) {
+          } else if (powerRand < 0.18) {
             obstacles.push({
               x: canvas.width,
               y: canvas.height - 80 * scale,
@@ -433,7 +548,7 @@ const turboSpeedMultiplier = 2;
               height: 50 * scale,
               type: "turbo"
             });
-          } else {
+          } else if (powerRand < 0.27) {
             obstacles.push({
               x: canvas.width,
               y: canvas.height - 80 * scale,
@@ -441,11 +556,16 @@ const turboSpeedMultiplier = 2;
               height: 50 * scale,
               type: "shield"
             });
+          } else {
+            // Rocket booster collectible appears in the air (random height between 1/4 and 1/2 of canvas)
+            obstacles.push({
+              x: canvas.width,
+              y: canvas.height * (0.25 + Math.random() * 0.25),
+              width: 50 * scale,
+              height: 50 * scale,
+              type: "rocket"
+            });
           }
-        } // else: nothing (25%)
-        // Separate roll for cloud (30% chance)
-        if (Math.random() < 0.3) {
-          obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
         }
         obstacleTimer = 60 + Math.random() * 80;
       }
@@ -461,7 +581,23 @@ const turboSpeedMultiplier = 2;
           car.y + car.height > obs.y + buffer
         ) {
           if ((obs.type === "tree" || obs.type === "ufo" || obs.type === "pothole") && !obs.hit) {
+            if (rocketActive && obs.type !== "ufo") continue; // immune to ground obstacles while flying
             obs.hit = true;
+            if (obs.type === "tree") {
+              obs.falling = true;
+              obs.fallAngle = 0;
+              obs.fallSpeed = 0.08 + Math.random() * 0.04;
+            }
+            if (obs.type === "ufo") {
+              obs.spinning = true;
+              obs.spinAngle = 0;
+              obs.spinSpeed = 0.3 + Math.random() * 0.2;
+              obs.followCar = true;
+              obs.followTimer = 30 + Math.floor(Math.random() * 20); // follow car for 30-50 frames
+            }
+            if (obs.type === "pothole") {
+              carJerkTimer = 12; // frames of jerk
+            }
             if (!shieldActive) {
               health -= 25;
               if (health <= 0) {
@@ -503,6 +639,21 @@ const turboSpeedMultiplier = 2;
               alpha: 1.0,
               dy: -0.5
             });
+          }
+          else if (obs.type === "rocket" && !obs.hit) {
+            obs.hit = true;
+            rocketActive = true;
+            rocketTimer = 600; // 5 seconds at ~60 FPS
+            floatingTexts.push({
+              text: "↑ and ↓ arrow keys to navigate",
+              x: car.x + car.width / 2,
+              y: car.y - 30,
+              alpha: 1.0,
+              dy: -0.5
+            });
+            console.log("Rocket collected");
+            // Remove rocket from obstacles immediately after collection
+            obstacles = obstacles.filter(o => o !== obs);
           }
         }
       }
@@ -661,24 +812,27 @@ const turboSpeedMultiplier = 2;
       }
 
       // playing
-      car.dy += gravity;
-      if (jumping && jumpHoldTime < maxJumpHold) {
-        car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
-        jumpHoldTime++;
-      }
-      // Particle landing detection
-      const previousY = car.y;
-      car.y += car.dy;
-      const groundY = canvas.height - 150 * scale;
-      if (car.y >= groundY) {
-        if (!car.onGround && previousY < groundY) {
-          spawnDust(car.x + car.width / 2, groundY + car.height / 2);
+      if (!rocketActive) {
+        car.dy += gravity;
+        if (jumping && jumpHoldTime < maxJumpHold) {
+          car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
+          jumpHoldTime++;
         }
-        car.y = groundY;
-        car.dy = 0;
-        car.onGround = true;
+        // Particle landing detection
+        const previousY = car.y;
+        car.y += car.dy;
+        const groundY = canvas.height - 150 * scale;
+        if (car.y >= groundY) {
+          if (!car.onGround && previousY < groundY) {
+            spawnDust(car.x + car.width / 2, groundY + car.height / 2);
+          }
+          car.y = groundY;
+          car.dy = 0;
+          car.onGround = true;
+        }
       }
 
+      // Always run these, regardless of rocketActive
       // Update particles
       for (let p of particles) {
         p.x += p.dx;
@@ -691,8 +845,39 @@ const turboSpeedMultiplier = 2;
       checkCollision();
       score += 0.1;
 
-      // Turbo and shield logic, and speed/visual indicators
-      if (turboActive) {
+      // Turbo, shield, and rocket logic
+      if (rocketActive) {
+        rocketTimer--;
+        // Disable gravity and jumping
+        car.dy = 0;
+        jumping = false;
+        // Move car up/down with arrow keys or touch
+        if (keys["ArrowUp"] || keys["w"]) {
+          car.y -= 6 * scale;
+        }
+        if (keys["ArrowDown"] || keys["s"]) {
+          car.y += 6 * scale;
+        }
+        // Clamp car within screen
+        car.y = Math.max(0, Math.min(car.y, canvas.height - car.height - 10));
+        // Draw rocket flame under car
+        const flameX = car.x + car.width / 2;
+        const flameY = car.y + car.height;
+        ctx.save();
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = "orange";
+        ctx.beginPath();
+        ctx.moveTo(flameX, flameY);
+        ctx.lineTo(flameX - 18 * scale, flameY + 40 * scale);
+        ctx.lineTo(flameX + 18 * scale, flameY + 40 * scale);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        // Immunity to ground obstacles is handled in collision logic (see below)
+        if (rocketTimer <= 0) {
+          rocketActive = false;
+        }
+      } else if (turboActive) {
         speed = 3 * turboSpeedMultiplier;
         turboTimer--;
         if (turboTimer <= 0) {
@@ -739,6 +924,10 @@ const turboSpeedMultiplier = 2;
       ctx.fillText(infoText, canvas.width / 2, 40);
       ctx.textAlign = "left";
 
+      if (carJerkTimer > 0) {
+        carJerkTimer--;
+      }
+
       requestAnimationFrame(update);
     }
 
@@ -762,6 +951,9 @@ const turboSpeedMultiplier = 2;
     }
 
     document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s") {
+        keys[e.key] = true;
+      }
       if ((e.key === " " || e.key === "Spacebar")) {
         if (gameState === "start") {
           gameState = "playing";
@@ -778,6 +970,9 @@ const turboSpeedMultiplier = 2;
     });
 
     document.addEventListener("keyup", (e) => {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s") {
+        keys[e.key] = false;
+      }
       if ((e.key === " " || e.key === "Spacebar") && gameState === "playing") {
         handleJumpEnd();
       }
@@ -788,6 +983,10 @@ const turboSpeedMultiplier = 2;
       if (gameState === "start") {
         gameState = "playing";
         restartGame();
+      } else if (rocketActive) {
+        const touchY = e.touches[0].clientY;
+        if (touchY < car.y) car.y -= 30 * scale;
+        else if (touchY > car.y + car.height) car.y += 30 * scale;
       } else {
         handleJumpStart();
       }
