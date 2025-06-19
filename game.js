@@ -289,6 +289,29 @@ const turboSpeedMultiplier = 2;
           ctx.textBaseline = "middle";
           ctx.fillText("🛡️", centerX, centerY);
         }
+        else if (obs.type === "pothole") {
+          // Draw an irregular black shape (random polygon) on the road, with a light gray jagged outline
+          ctx.save();
+          ctx.beginPath();
+          // Draw using relative points so pothole moves with obs.x, obs.y
+          const relPoints = obs.relPoints;
+          ctx.moveTo(obs.x + relPoints[0].x, obs.y + relPoints[0].y);
+          for (let i = 1; i < relPoints.length; i++) {
+            ctx.lineTo(obs.x + relPoints[i].x, obs.y + relPoints[i].y);
+          }
+          ctx.closePath();
+          // Fill
+          ctx.fillStyle = "#000";
+          ctx.shadowColor = "#111";
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          // Outline
+          ctx.strokeStyle = "#bbb";
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
 
@@ -355,29 +378,65 @@ const turboSpeedMultiplier = 2;
       obstacleTimer--;
       if (obstacleTimer <= 0) {
         const rand = Math.random();
-        if (rand < 0.35) {
+        if (rand < 0.25) {
+          // Tree: 25%
           const height = (80 + Math.random() * 120) * scale;
           const y = canvas.height - 30 * scale - height;
           obstacles.push({ x: canvas.width, y: y, width: 60 * scale, height, type: "tree", trunkRandom: Math.random(), hit: false });
-        } else if (rand < 0.45) {
-          obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
         } else if (rand < 0.50) {
+          // Pothole: 25%
+          const potholeWidth = 110 * scale + Math.random() * 50 * scale;
+          const potholeHeight = 45 * scale + Math.random() * 20 * scale;
+          const baseX = canvas.width;
+          // Place pothole so it sits on the road
+          const roadHeight = 110 * scale;
+          const baseY = canvas.height - roadHeight + 10 * scale;
+          // Generate random polygon points for irregular shape (relative to center)
+          const relPoints = [];
+          const numPoints = 7 + Math.floor(Math.random() * 3);
+          for (let i = 0; i < numPoints; i++) {
+            const angle = (Math.PI * 2 / numPoints) * i + Math.random() * 0.3;
+            const rX = potholeWidth / 2 + (Math.random() - 0.5) * 18 * scale;
+            const rY = potholeHeight / 2 + (Math.random() - 0.5) * 10 * scale;
+            relPoints.push({
+              x: potholeWidth / 2 + Math.cos(angle) * rX,
+              y: potholeHeight / 2 + Math.sin(angle) * rY
+            });
+          }
           obstacles.push({
-            x: canvas.width,
-            y: canvas.height - 80 * scale,
-            width: 50 * scale,
-            height: 50 * scale,
-            type: "turbo"
-          });
-        } else if (rand < 0.55) {
-          obstacles.push({
-            x: canvas.width,
-            y: canvas.height - 80 * scale,
-            width: 50 * scale,
-            height: 50 * scale,
-            type: "shield"
+            x: baseX,
+            y: baseY,
+            width: potholeWidth,
+            height: potholeHeight,
+            type: "pothole",
+            relPoints,
+            hit: false
           });
         } else if (rand < 0.75) {
+          // Power-up: 25% (split equally)
+          const powerRand = Math.random();
+          if (powerRand < 1/3) {
+            obstacles.push({ x: canvas.width, y: canvas.height - 140 * scale, width: 50 * scale, height: 50 * scale, type: "fuel" });
+          } else if (powerRand < 2/3) {
+            obstacles.push({
+              x: canvas.width,
+              y: canvas.height - 80 * scale,
+              width: 50 * scale,
+              height: 50 * scale,
+              type: "turbo"
+            });
+          } else {
+            obstacles.push({
+              x: canvas.width,
+              y: canvas.height - 80 * scale,
+              width: 50 * scale,
+              height: 50 * scale,
+              type: "shield"
+            });
+          }
+        } // else: nothing (25%)
+        // Separate roll for cloud (30% chance)
+        if (Math.random() < 0.3) {
           obstacles.push({ x: canvas.width, y: 180 * scale + Math.random() * 60 * scale, width: 90 * scale, height: 50 * scale, type: "cloud" });
         }
         obstacleTimer = 60 + Math.random() * 80;
@@ -393,7 +452,7 @@ const turboSpeedMultiplier = 2;
           car.y < obs.y + obs.height - buffer &&
           car.y + car.height > obs.y + buffer
         ) {
-          if ((obs.type === "tree" || obs.type === "ufo") && !obs.hit) {
+          if ((obs.type === "tree" || obs.type === "ufo" || obs.type === "pothole") && !obs.hit) {
             obs.hit = true;
             if (!shieldActive) {
               health -= 25;
@@ -571,10 +630,10 @@ const turboSpeedMultiplier = 2;
 
       // "playing" or "paused"
       drawRoad();
+      drawObstacles();
       drawCar();
       drawCarShieldEffect();
       drawCarTurboEffect();
-      drawObstacles();
       drawParticles();
       drawFloatingTexts();
 
