@@ -1,4 +1,6 @@
-      /*
+import { initBossMode, updateBossMode, drawBossMode, fireLaser } from './boss.js';
+
+    /*
       --- AMBITIOUS UPGRADE PLAN ---
       1. Visuals:
         - Parallax background layers (sky, hills, trees)
@@ -43,7 +45,7 @@
 
     let roadOffset = 0;
 
-    let gameState = "start"; // "start", "playing", "paused", "gameover"
+    let gameState = "start"; // "start", "playing", "paused", "gameover", "boss"
 
     // Particle array for dust effects
     let particles = [];
@@ -70,7 +72,8 @@ let highScore = parseInt(localStorage.getItem("highScore")) || 0;
 let health = 100;
 let fuel = 100;
 let fuelTimer = 0;
-let speed = 3;
+let speed = 0;
+let preTurboSpeed = 0;
 
 let shieldActive = false;
 let shieldTimer = 0;
@@ -83,6 +86,7 @@ let rocketActive = false;
 let rocketTimer = 0;
 
 let keys = {};
+let mouse = { x: 0, y: 0 };
 
 let carJerkTimer = 0;
 let carJerkOffset = 0;
@@ -227,7 +231,7 @@ let shakeTimer = 0;
       const roadY = canvas.height - roadHeight;
       const roadX = 0;
       const roadWidth = canvas.width;
-      roadOffset -= speed * 1.5;
+      roadOffset -= speed * 1.3;
       if (roadOffset <= -60 * scale) roadOffset += 60 * scale;
 
       // Draw road base
@@ -565,7 +569,7 @@ let shakeTimer = 0;
 
     function updateObstacles() {
       for (let obs of obstacles) {
-        obs.x -= speed * 1.5;
+        obs.x -= speed * 1.3;
         if (obs.type === "ufo" && obs.dx) {
           obs.x += obs.dx;
         }
@@ -744,6 +748,9 @@ let shakeTimer = 0;
           }
           else if (obs.type === "turbo" && !obs.hit) {
             obs.hit = true;
+            if (!turboActive) {
+              preTurboSpeed = speed;
+            }
             turboActive = true;
             turboTimer = 300; // 5 seconds at ~60 FPS
             floatingTexts.push({
@@ -912,10 +919,13 @@ let shakeTimer = 0;
       ctx.save();
       ctx.translate(shakeX, shakeY);
       ctx.clearRect(-shakeX, -shakeY, canvas.width, canvas.height);
+      
       drawBackground();
 
       if (gameState === "start") {
         drawStartScreen();
+        ctx.restore();
+        requestAnimationFrame(update);
         return;
       }
 
@@ -925,17 +935,118 @@ let shakeTimer = 0;
         drawObstacles();
         drawParticles();
         drawGameOver();
+        ctx.restore();
+        requestAnimationFrame(update);
         return;
       }
 
-      // "playing" or "paused"
+      // Check for transition to boss mode
+      if (score >= 50 && gameState === "playing") {
+        gameState = "boss";
+        initBossMode(ctx, car, carImg);
+      }
+
+      // --- Main Game Logic ---
       drawRoad();
-      drawObstacles();
-      drawCar();
-      drawCarShieldEffect();
-      drawCarTurboEffect();
-      drawParticles();
-      drawFloatingTexts();
+
+      if (gameState === "boss") {
+        let bossStatus = updateBossMode(ctx, car, keys, mouse);
+        if (bossStatus === "defeated") {
+          gameState = "victory";
+        }
+        drawBossMode(ctx, car);
+      } else if (gameState === "victory") {
+        drawVictoryScreen();
+      } else { // "playing" or "paused"
+        if (gameState === "playing") {
+          if (!rocketActive) {
+            car.dy += gravity;
+            if (jumping && jumpHoldTime < maxJumpHold) {
+              car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
+              jumpHoldTime++;
+            }
+            // Particle landing detection
+            const previousY = car.y;
+            car.y += car.dy;
+            const groundY = canvas.height - 150 * scale;
+            if (car.y >= groundY) {
+              if (!car.onGround && previousY < groundY) {
+                spawnDust(car.x + car.width / 2, groundY + car.height / 2);
+              }
+              car.y = groundY;
+              car.dy = 0;
+              car.onGround = true;
+            }
+          } else {
+            // Rocket logic
+            rocketTimer--;
+            car.dy = 0;
+            jumping = false;
+            if (keys["ArrowUp"] || keys["w"]) car.y -= 6 * scale;
+            if (keys["ArrowDown"] || keys["s"]) car.y += 6 * scale;
+            car.y = Math.max(0, Math.min(car.y, canvas.height - car.height - 10));
+            if (rocketTimer <= 0) rocketActive = false;
+          }
+
+          for (let p of particles) {
+            p.x += p.dx;
+            p.y += p.dy;
+            p.alpha -= p.decay;
+          }
+          particles = particles.filter(p => p.alpha > 0);
+
+          updateObstacles();
+          checkCollision();
+          score += 0.1;
+
+          if (turboActive) {
+            speed = preTurboSpeed * turboSpeedMultiplier;
+            turboTimer--;
+            if (turboTimer <= 0) {
+              turboActive = false;
+              speed = preTurboSpeed; 
+            }
+          } else {
+            if (score > 0 && Math.floor(score) % 100 === 0) {
+              speed += 0.1;
+            }
+          }
+
+          if (shieldActive) {
+            shieldTimer--;
+            if (shieldTimer <= 0) shieldActive = false;
+          }
+          
+          fuelTimer++;
+          if (fuelTimer % 5 === 0) fuel -= 0.1;
+          if (fuel <= 0) {
+            fuel = 0;
+            gameState = "gameover";
+          }
+        }
+
+        // Drawing for playing state
+        drawObstacles();
+        drawCar();
+        drawCarShieldEffect();
+        drawCarTurboEffect();
+        drawParticles();
+        drawFloatingTexts();
+        
+        // UI for playing state
+        const infoText = `Score: ${Math.floor(score)}   High Score: ${highScore}   Health: ${health}%   Fuel: ${Math.floor(fuel)}%`;
+        ctx.fillStyle = "white";
+        ctx.font = "20px 'Press Start 2P', monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(infoText, canvas.width / 2, 40);
+        ctx.textAlign = "left";
+
+        let boostY = 70;
+        let boostX = canvas.width / 2;
+        // ... (rest of boost timer drawing)
+
+        if (carJerkTimer > 0) carJerkTimer--;
+      }
 
       if (gameState === "paused") {
         ctx.fillStyle = "rgba(0,0,0,0.4)";
@@ -945,173 +1056,28 @@ let shakeTimer = 0;
         ctx.fillText("Paused", canvas.width / 2 - 70, canvas.height / 2 - 20);
         ctx.font = "20px 'Press Start 2P', monospace";
         ctx.fillText("Press 'P' to resume", canvas.width / 2 - 100, canvas.height / 2 + 20);
-        return;
       }
 
-      // playing
-      if (!rocketActive) {
-        car.dy += gravity;
-        if (jumping && jumpHoldTime < maxJumpHold) {
-          car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
-          jumpHoldTime++;
-        }
-        // Particle landing detection
-        const previousY = car.y;
-        car.y += car.dy;
-        const groundY = canvas.height - 150 * scale;
-        if (car.y >= groundY) {
-          if (!car.onGround && previousY < groundY) {
-            spawnDust(car.x + car.width / 2, groundY + car.height / 2);
-          }
-          car.y = groundY;
-          car.dy = 0;
-          car.onGround = true;
-        }
-      }
-
-      // Always run these, regardless of rocketActive
-      // Update particles
-      for (let p of particles) {
-        p.x += p.dx;
-        p.y += p.dy;
-        p.alpha -= p.decay;
-      }
-      particles = particles.filter(p => p.alpha > 0);
-
-      updateObstacles();
-      checkCollision();
-      score += 0.1;
-
-      // Turbo, shield, and rocket logic
-      if (rocketActive) {
-        rocketTimer--;
-        // Disable gravity and jumping
-        car.dy = 0;
-        jumping = false;
-        // Move car up/down with arrow keys or touch
-        if (keys["ArrowUp"] || keys["w"]) {
-          car.y -= 6 * scale;
-        }
-        if (keys["ArrowDown"] || keys["s"]) {
-          car.y += 6 * scale;
-        }
-        // Clamp car within screen
-        car.y = Math.max(0, Math.min(car.y, canvas.height - car.height - 10));
-        // Draw rocket flame under car
-        const flameX = car.x + car.width / 2;
-        const flameY = car.y + car.height;
-        ctx.save();
-        ctx.globalAlpha = 0.8;
-        ctx.fillStyle = "orange";
-        ctx.beginPath();
-        ctx.moveTo(flameX, flameY);
-        ctx.lineTo(flameX - 18 * scale, flameY + 40 * scale);
-        ctx.lineTo(flameX + 18 * scale, flameY + 40 * scale);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-        // Immunity to ground obstacles is handled in collision logic (see below)
-        if (rocketTimer <= 0) {
-          rocketActive = false;
-        }
-      } else if (turboActive) {
-        speed = 3 * turboSpeedMultiplier;
-        turboTimer--;
-        if (turboTimer <= 0) {
-          turboActive = false;
-          speed = 3; // reset to base speed (or your variable speed if increased)
-        }
-      } else {
-        // Normal speed increases based on score
-        if (score > 0 && Math.floor(score) % 100 === 0) {
-          speed += 0.1;
-        }
-      }
-
-      if (shieldActive) {
-        shieldTimer--;
-        if (shieldTimer <= 0) {
-          shieldActive = false;
-        }
-      }
-
-      // Optional: Visual indicators for active shield or turbo
-      // if (shieldActive) {
-      //   ctx.strokeStyle = "cyan";
-      //   ctx.lineWidth = 5;
-      //   ctx.strokeRect(car.x - 5, car.y - 5, car.width + 10, car.height + 10);
-      // }
-      // if (turboActive) {
-      //   ctx.strokeStyle = "orange";
-      //   ctx.lineWidth = 5;
-      //   ctx.strokeRect(car.x - 10, car.y - 10, car.width + 20, car.height + 20);
-      // }
-
-      fuelTimer++;
-      if (fuelTimer % 5 === 0) fuel -= 0.1;
-      if (fuel <= 0) {
-        fuel = 0;
-        gameState = "gameover";
-      }
-
-      const infoText = `Score: ${Math.floor(score)}   High Score: ${highScore}   Health: ${health}%   Fuel: ${Math.floor(fuel)}%`;
-      ctx.fillStyle = "white";
-      ctx.font = "20px 'Press Start 2P', monospace";
-      ctx.textAlign = "center";
-      ctx.fillText(infoText, canvas.width / 2, 40);
-      ctx.textAlign = "left";
-
-      // Draw boost timers below game state info
-      let boostY = 70;
-      let boostX = canvas.width / 2;
-      let boostSpacing = 120;
-      let activeBoosts = [];
-      if (shieldActive) activeBoosts.push({ icon: "🛡️", timer: shieldTimer, max: 300 });
-      if (turboActive) activeBoosts.push({ icon: "⚡", timer: turboTimer, max: 300 });
-      if (rocketActive) activeBoosts.push({ icon: "🚀", timer: rocketTimer, max: 600 });
-      if (activeBoosts.length > 0) {
-        ctx.font = "28px Arial";
-        ctx.textAlign = "center";
-        for (let i = 0; i < activeBoosts.length; i++) {
-          let bx = boostX + (i - (activeBoosts.length - 1) / 2) * boostSpacing;
-          ctx.fillText(activeBoosts[i].icon, bx, boostY);
-          // Draw timer bar below icon
-          let barWidth = 60;
-          let barHeight = 8;
-          let pct = Math.max(0, activeBoosts[i].timer / activeBoosts[i].max);
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(bx - barWidth / 2, boostY + 12, barWidth, barHeight);
-          ctx.fillStyle = i === 0 ? "#0ff" : (i === 1 ? "orange" : "#f44");
-          ctx.fillRect(bx - barWidth / 2, boostY + 12, barWidth * pct, barHeight);
-          ctx.strokeStyle = "#222";
-          ctx.strokeRect(bx - barWidth / 2, boostY + 12, barWidth, barHeight);
-          ctx.fillStyle = "white";
-        }
-        ctx.textAlign = "left";
-      }
-
-      if (carJerkTimer > 0) {
-        carJerkTimer--;
-      }
-
-      dayTime += 0.0001; // adjust speed as desired
+      dayTime += 0.0001;
       if (dayTime > 1) dayTime -= 1;
-
-      // --- Helper/Tutorial Text ---
-      ctx.font = "18px Arial";
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "right";
-      let tipY = 100;
-      let tipX = canvas.width - 40;
-      if (rocketActive) {
-        ctx.fillText("Use UP/DOWN arrows to fly", tipX, tipY);
-      } else if (car.onGround && gameState === "playing") {
-        ctx.fillText("Press SPACE to jump", tipX, tipY);
-      }
-      ctx.textAlign = "left";
 
       ctx.restore();
       requestAnimationFrame(update);
+    }
+
+    function drawVictoryScreen() {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "gold";
+      ctx.font = "40px 'Press Start 2P', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("YOU WON!", canvas.width / 2, canvas.height / 2 - 60);
+      ctx.fillStyle = "white";
+      ctx.font = "20px 'Press Start 2P', monospace";
+      ctx.fillText("You saved Earth from alien occupation!", canvas.width / 2, canvas.height / 2);
+      ctx.font = "16px 'Press Start 2P', monospace";
+      ctx.fillText("Press 'R' to play again", canvas.width / 2, canvas.height / 2 + 60);
+      ctx.textAlign = "left";
     }
 
     function restartGame() {
@@ -1121,6 +1087,7 @@ let shakeTimer = 0;
       }
       health = 100;
       fuel = 100;
+      speed = 1.5; // Reset speed to default
       car.x = 100 * scale;
       car.y = canvas.height - 150 * scale;
       car.dy = 0;
@@ -1130,7 +1097,6 @@ let shakeTimer = 0;
       score = 0;
       particles = [];
       gameState = "playing";
-      update();
     }
 
     document.addEventListener("keydown", (e) => {
@@ -1145,7 +1111,7 @@ let shakeTimer = 0;
           handleJumpStart();
         }
       } else if (e.key === "r" || e.key === "R") {
-        if (gameState === "gameover") restartGame();
+        if (gameState === "gameover" || gameState === "victory") restartGame();
       } else if (e.key === "p" || e.key === "P") {
         if (gameState === "playing") gameState = "paused";
         else if (gameState === "paused") gameState = "playing";
@@ -1166,6 +1132,8 @@ let shakeTimer = 0;
       if (gameState === "start") {
         gameState = "playing";
         restartGame();
+      } else if (gameState === "boss") {
+        // Placeholder for touch controls in boss mode
       } else if (rocketActive) {
         const touchY = e.touches[0].clientY;
         if (touchY < car.y) car.y -= 30 * scale;
@@ -1184,10 +1152,18 @@ let shakeTimer = 0;
       if (gameState === "start") {
         gameState = "playing";
         restartGame();
+      } else if (gameState === "boss") {
+        fireLaser(car, mouse);
       } else {
         handleJumpStart();
         setTimeout(handleJumpEnd, 100); // quick tap simulates short jump
       }
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
     });
 
     update();
