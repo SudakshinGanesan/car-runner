@@ -943,7 +943,7 @@ let shakeTimer = 0;
       // Check for transition to boss mode
       if (score >= 50 && gameState === "playing") {
         gameState = "boss";
-        initBossMode(ctx, car, carImg);
+        initBossMode(ctx, car);
       }
 
       // --- Main Game Logic ---
@@ -953,6 +953,8 @@ let shakeTimer = 0;
         let bossStatus = updateBossMode(ctx, car, keys, mouse);
         if (bossStatus === "defeated") {
           gameState = "victory";
+        } else if (bossStatus === "player_defeated") {
+          gameState = "gameover";
         }
         drawBossMode(ctx, car);
       } else if (gameState === "victory") {
@@ -1100,7 +1102,7 @@ let shakeTimer = 0;
     }
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s") {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s" || e.key === "ArrowLeft" || e.key === "a" || e.key === "ArrowRight" || e.key === "d") {
         keys[e.key] = true;
       }
       if ((e.key === " " || e.key === "Spacebar")) {
@@ -1119,7 +1121,7 @@ let shakeTimer = 0;
     });
 
     document.addEventListener("keyup", (e) => {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s") {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "s" || e.key === "ArrowLeft" || e.key === "a" || e.key === "ArrowRight" || e.key === "d") {
         keys[e.key] = false;
       }
       if ((e.key === " " || e.key === "Spacebar") && gameState === "playing") {

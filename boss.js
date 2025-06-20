@@ -6,15 +6,21 @@
 let boss = {}; // The boss object
 let lasers = []; // Array for player's lasers
 let bossLasers = []; // Array for boss's lasers
-let localCarImg = null;
 const playerSpeed = 7;
+
+const transformerImg = new Image();
+let transformerImgLoaded = false;
+transformerImg.src = "transformer.png";
+transformerImg.onload = () => {
+  transformerImgLoaded = true;
+  console.log("Transformer sprite loaded!");
+};
 
 // --- PUBLIC FUNCTIONS (EXPORTED) ---
 
 // Called once to set up the boss battle
-export function initBossMode(ctx, playerObject, carImg) {
+export function initBossMode(ctx, playerObject) {
   console.log("Boss mode initiated!");
-  localCarImg = carImg;
 
   // Initialize the boss
   boss = {
@@ -26,12 +32,18 @@ export function initBossMode(ctx, playerObject, carImg) {
     maxHealth: 100,
     speed: 3,
     direction: 1, // 1 for right, -1 for left
+    shootCooldown: 0,
   };
 
   // Transform the player
   playerObject.isTransformed = true;
+  playerObject.health = 100;
+  playerObject.maxHealth = 100;
   playerObject.x = ctx.canvas.width / 2;
   playerObject.y = ctx.canvas.height - 200;
+  // Adjust player dimensions for the new sprite
+  playerObject.height = 150; // Taller
+  playerObject.width = 120; // Maintain aspect ratio
 }
 
 export function fireLaser(playerObject, mouse) {
@@ -80,7 +92,42 @@ export function updateBossMode(ctx, playerObject, keys, mouse) {
   // Filter out lasers that are off-screen
   lasers = lasers.filter(laser => laser.y > 0 && laser.y < ctx.canvas.height && laser.x > 0 && laser.x < ctx.canvas.width);
 
-  // 4. Handle collisions
+  // 4. Update boss lasers and check for player collision
+  bossLasers.forEach((laser, index) => {
+    laser.y += laser.speed;
+    if (
+      laser.x < playerObject.x + playerObject.width &&
+      laser.x + laser.width > playerObject.x &&
+      laser.y < playerObject.y + playerObject.height &&
+      laser.y + laser.height > playerObject.y
+    ) {
+      playerObject.health -= 10;
+      bossLasers.splice(index, 1);
+      if (playerObject.health <= 0) {
+        status = "player_defeated";
+      }
+    }
+    // Remove if off-screen
+    if (laser.y > ctx.canvas.height) {
+      bossLasers.splice(index, 1);
+    }
+  });
+
+  // 5. Boss shooting logic
+  if (boss.shootCooldown <= 0) {
+    bossLasers.push({
+      x: boss.x + boss.width / 2,
+      y: boss.y + boss.height,
+      width: 5,
+      height: 15,
+      color: '#FF4136', // Red
+      speed: 8,
+    });
+    boss.shootCooldown = 60; // Cooldown in frames (1 sec at 60fps)
+  }
+  boss.shootCooldown--;
+
+  // 6. Handle collisions with player lasers
   lasers.forEach((laser, index) => {
     if (
       laser.x < boss.x + boss.width &&
@@ -102,13 +149,13 @@ export function updateBossMode(ctx, playerObject, keys, mouse) {
 
 // The drawing loop for the boss battle
 export function drawBossMode(ctx, playerObject) {
-  // 1. Draw the transformed player
-  if (localCarImg) {
-    ctx.drawImage(localCarImg, playerObject.x, playerObject.y, playerObject.width, playerObject.height);
-    // Add "transformer" parts
-    ctx.fillStyle = 'gray';
-    ctx.fillRect(playerObject.x - 10, playerObject.y + 20, 10, 40);
-    ctx.fillRect(playerObject.x + playerObject.width, playerObject.y + 20, 10, 40);
+  // 1. Draw the transformed player (now using the sprite)
+  if (transformerImgLoaded) {
+    ctx.drawImage(transformerImg, playerObject.x, playerObject.y, playerObject.width, playerObject.height);
+  } else {
+    // Fallback drawing if the image is loading
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(playerObject.x, playerObject.y, playerObject.width, playerObject.height);
   }
 
   // 2. Draw the boss (alien fighter jet)
@@ -124,6 +171,11 @@ export function drawBossMode(ctx, playerObject) {
 
   // 3. Draw all lasers
   lasers.forEach(laser => {
+    ctx.fillStyle = laser.color;
+    ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+  });
+
+  bossLasers.forEach(laser => {
     ctx.fillStyle = laser.color;
     ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
   });
@@ -146,4 +198,21 @@ export function drawBossMode(ctx, playerObject) {
   ctx.textAlign = 'center';
   ctx.fillText(`ALIEN MOTHERSHIP`, ctx.canvas.width / 2, barY + barHeight / 1.5);
   ctx.textAlign = 'left';
+
+  // 5. Draw Player Health Bar
+  const playerBarWidth = 200;
+  const playerBarHeight = 20;
+  const playerBarX = 20;
+  const playerBarY = ctx.canvas.height - 40;
+  // Background
+  ctx.fillStyle = '#555';
+  ctx.fillRect(playerBarX, playerBarY, playerBarWidth, playerBarHeight);
+  // Health
+  const playerHealthPercentage = playerObject.health / playerObject.maxHealth;
+  ctx.fillStyle = '#2ECC40'; // Green
+  ctx.fillRect(playerBarX, playerBarY, playerBarWidth * playerHealthPercentage, playerBarHeight);
+  // Text
+  ctx.fillStyle = 'white';
+  ctx.font = '16px Arial';
+  ctx.fillText('TRANSFORMER HEALTH', playerBarX + 5, playerBarY - 5);
 } 
