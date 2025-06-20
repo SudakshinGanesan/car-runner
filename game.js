@@ -85,6 +85,9 @@ const turboSpeedMultiplier = 2;
 let rocketActive = false;
 let rocketTimer = 0;
 
+let playerLasers = [];
+let ufoLasers = [];
+
 let keys = {};
 let mouse = { x: 0, y: 0 };
 
@@ -573,6 +576,21 @@ let shakeTimer = 0;
         if (obs.type === "ufo" && obs.dx) {
           obs.x += obs.dx;
         }
+        // UFO shoot logic
+        if (obs.type === "ufo" && !obs.hit && obs.shotsRemaining > 0) {
+          obs.shootCooldown--;
+          if (obs.shootCooldown <= 0) {
+            ufoLasers.push({
+              x: obs.x + obs.width / 2,
+              y: obs.y + obs.height,
+              width: 5,
+              height: 15,
+              speed: 5
+            });
+            obs.shotsRemaining--;
+            obs.shootCooldown = 45; // Cooldown between shots
+          }
+        }
         // UFO swoop logic
         if (obs.type === "ufo" && typeof obs.dy === "number") {
           if (obs.y < obs.targetY) {
@@ -662,7 +680,9 @@ let shakeTimer = 0;
             spinAngle: 0,
             spinSpeed: 0,
             followCar: false,
-            followTimer: 0
+            followTimer: 0,
+            shootCooldown: 60 + Math.random() * 60,
+            shotsRemaining: 2
           });
         } else if (rand < 0.80) {
           // Power-up: 30%
@@ -701,6 +721,24 @@ let shakeTimer = 0;
     }
 
     function checkCollision() {
+      // Player laser vs obstacle collision
+      for (let i = playerLasers.length - 1; i >= 0; i--) {
+        for (let j = obstacles.length - 1; j >= 0; j--) {
+          let laser = playerLasers[i];
+          let obs = obstacles[j];
+
+          if (obs.type === 'ufo' && !obs.hit && laser.x < obs.x + obs.width && laser.x + laser.width > obs.x && laser.y < obs.y + obs.height && laser.y + laser.height > obs.y) {
+            obs.hit = true;
+            obs.spinning = true; // Make it spin and fall like when hit by car
+            obs.spinSpeed = 0.3 + Math.random() * 0.2;
+            playerLasers.splice(i, 1);
+            score += 50; // Bonus points!
+            floatingTexts.push({ text: "+50", x: obs.x, y: obs.y, alpha: 1.0, dy: -0.5 });
+            break; // Laser can only hit one obstacle
+          }
+        }
+      }
+
       for (let obs of obstacles) {
         const buffer = 20;
         if (
@@ -962,6 +1000,11 @@ let shakeTimer = 0;
       } else { // "playing" or "paused"
         if (gameState === "playing") {
           if (!rocketActive) {
+            // Player horizontal movement
+            if (keys["ArrowLeft"] || keys["a"]) car.x -= 5;
+            if (keys["ArrowRight"] || keys["d"]) car.x += 5;
+            car.x = Math.max(0, Math.min(car.x, canvas.width - car.width));
+
             car.dy += gravity;
             if (jumping && jumpHoldTime < maxJumpHold) {
               car.dy += jumpStrength * 0.05; // slightly reduce gravity during hold
@@ -988,6 +1031,31 @@ let shakeTimer = 0;
             if (keys["ArrowDown"] || keys["s"]) car.y += 6 * scale;
             car.y = Math.max(0, Math.min(car.y, canvas.height - car.height - 10));
             if (rocketTimer <= 0) rocketActive = false;
+          }
+
+          // Update player lasers
+          for (let i = playerLasers.length - 1; i >= 0; i--) {
+            let laser = playerLasers[i];
+            laser.y -= laser.speed;
+            if (laser.y < 0) {
+              playerLasers.splice(i, 1);
+            }
+          }
+
+          // Update UFO lasers & check player collision
+          for (let i = ufoLasers.length - 1; i >= 0; i--) {
+            let laser = ufoLasers[i];
+            laser.y += laser.speed;
+            // Check collision with car
+            if (!shieldActive && laser.x < car.x + car.width && laser.x + laser.width > car.x && laser.y < car.y + car.height && laser.y + laser.height > car.y) {
+              health -= 10;
+              ufoLasers.splice(i, 1);
+              if (health <= 0) gameState = "gameover";
+              // Add hit effect
+              shakeTimer = 8;
+            } else if (laser.y > canvas.height) {
+              ufoLasers.splice(i, 1);
+            }
           }
 
           for (let p of particles) {
@@ -1035,6 +1103,18 @@ let shakeTimer = 0;
         drawParticles();
         drawFloatingTexts();
         
+        // Draw player lasers
+        ctx.fillStyle = '#00FFFF';
+        for (const laser of playerLasers) {
+          ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+        }
+
+        // Draw UFO lasers
+        ctx.fillStyle = '#FF4136'; // Red
+        for (const laser of ufoLasers) {
+          ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+        }
+
         // UI for playing state
         const infoText = `Score: ${Math.floor(score)}   High Score: ${highScore}   Health: ${health}%   Fuel: ${Math.floor(fuel)}%`;
         ctx.fillStyle = "white";
@@ -1117,6 +1197,17 @@ let shakeTimer = 0;
       } else if (e.key === "p" || e.key === "P") {
         if (gameState === "playing") gameState = "paused";
         else if (gameState === "paused") gameState = "playing";
+      } else if (e.key === "x" || e.key === "X") {
+        if (gameState === 'playing' && !rocketActive) {
+          playerLasers.push({
+            x: car.x + car.width / 2 - 2,
+            y: car.y,
+            width: 4,
+            height: 15,
+            color: '#00FFFF',
+            speed: 10
+          });
+        }
       }
     });
 
