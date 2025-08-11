@@ -979,7 +979,7 @@ let shakeTimer = 0;
       }
 
       // Check for transition to boss mode
-      if (score >= 50 && gameState === "playing") {
+      if (score >= 500 && gameState === "playing") {
         gameState = "boss";
         initBossMode(ctx, car);
       }

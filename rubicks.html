@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>3D Rubik's Cube — Fixed attach bug</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  :root{
+    --ui-bg: #0b1220;
+    --panel-bg: rgba(255,255,255,0.04);
+    --accent: #70b3ff;
+    --muted: #9aa6b2;
+  }
+  html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue";background:linear-gradient(180deg,#071226 0%, #04121b 100%);color:#e6eef6}
+  #app{display:grid;grid-template-columns:1fr 320px;gap:16px;height:100%;padding:16px;box-sizing:border-box}
+  #viewer{background:var(--ui-bg);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.6);position:relative;overflow:hidden}
+  #hud{position:absolute;left:12px;top:12px;z-index:5;display:flex;gap:8px;flex-wrap:wrap}
+  .btn{background:var(--panel-bg);border:1px solid rgba(255,255,255,0.04);padding:8px 10px;border-radius:8px;color:var(--muted);cursor:pointer;backdrop-filter: blur(6px)}
+  .btn:hover{color:white;transform:translateY(-2px)}
+  #rightPanel{padding:18px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;box-shadow: inset 0 1px 0 rgba(255,255,255,0.02)}
+  h1{margin:0 0 8px 0;font-size:18px}
+  .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .kbd{background:#0a1624;padding:6px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.03);color:var(--muted)}
+  #moves{height:280px;overflow:auto;padding:8px;background:rgba(255,255,255,0.02);border-radius:8px;color:#cfe7ff}
+  #footer{position:absolute;right:12px;bottom:12px;color:var(--muted);font-size:13px}
+  .faceBtn{width:36px;height:36px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);cursor:pointer;color:var(--muted)}
+  .faceBtn:hover{color:white;transform:translateY(-2px)}
+  .status{font-size:13px;color:var(--muted)}
+  .big{font-size:20px;color:white}
+  #controlsGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  #logo{font-weight:600;color:var(--accent)}
+  .muted{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewer">
+    <div id="hud">
+      <button class="btn" id="scrambleBtn">Scramble</button>
+      <button class="btn" id="solveBtn">Auto-solve</button>
+      <button class="btn" id="undoBtn">Undo</button>
+      <button class="btn" id="redoBtn">Redo</button>
+      <div style="width:12px"></div>
+      <div class="btn" id="resetBtn">Reset</div>
+    </div>
+    <div id="footer">
+      <div class="muted">Moves: <span id="moveCount">0</span> · Time: <span id="time">00:00.00</span></div>
+    </div>
+    <canvas id="c"></canvas>
+  </div>
+
+  <div id="rightPanel">
+    <h1><span id="logo">Rubik3D</span> — polished cube (attach bug fixed)</h1>
+    <p class="muted">Click face buttons or use keyboard <span class="kbd">U R F D L B</span> (lowercase for counter). Use mouse to orbit & zoom.</p>
+    <div class="row">
+      <div class="big" id="status">Ready</div>
+    </div>
+
+    <div class="row">
+      <div id="controlsGrid">
+        <button class="faceBtn" data-move="U">U</button>
+        <button class="faceBtn" data-move="R">R</button>
+        <button class="faceBtn" data-move="F">F</button>
+        <button class="faceBtn" data-move="D">D</button>
+        <button class="faceBtn" data-move="L">L</button>
+        <button class="faceBtn" data-move="B">B</button>
+      </div>
+      <div style="flex:1">
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="scrAmtBtn">Scramble 25</button>
+          <input id="scrCnt" type="number" min="1" value="25" style="width:70px;margin-left:6px;padding:8px;border-radius:6px;background:#071226;border:1px solid rgba(255,255,255,0.03);color:var(--muted)"/>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:14px;margin-bottom:8px">Move History</h3>
+    <div id="moves"></div>
+
+    <h3 style="margin-top:12px;margin-bottom:8px">Options</h3>
+    <div class="row">
+      <label class="muted">Animation speed</label>
+      <input id="speed" type="range" min="0.2" max="2.0" step="0.05" value="1" style="flex:1"/>
+    </div>
+
+    <div style="height:20px"></div>
+    <div class="muted">Created with ❤️ — interact, scramble and enjoy.</div>
+  </div>
+</div>
+
+<!-- Three.js and OrbitControls via CDN -->
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+/*
+  Fix notes:
+  - Problem: the original code used THREE.SceneUtils.attach(...) which is not present
+    in modern Three.js builds -> caused TypeError: undefined is not an object (evaluating '(void 0).attach').
+  - Solution: use Object3D.attach when available, else fallback to matrix math to reparent
+    while preserving world transforms.
+  - The helper `reparentPreserve(child, newParent)` provides a safe, version-tolerant implementation.
+*/
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x081226);
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const camera = new THREE.PerspectiveCamera(45,2,0.1,100);
+camera.position.set(5,5,7);
+camera.lookAt(0,0,0);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.rotateSpeed = 0.6;
+controls.minDistance = 4;
+controls.maxDistance = 20;
+
+// lighting
+const hemi = new THREE.HemisphereLight(0xffffff, 0x061020, 0.7);
+scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+dir.position.set(5,10,4);
+dir.castShadow = true;
+dir.shadow.mapSize.set(1024,1024);
+dir.shadow.camera.left = -10; dir.shadow.camera.right = 10;
+dir.shadow.camera.top = 10; dir.shadow.camera.bottom = -10;
+scene.add(dir);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(60,60), new THREE.MeshStandardMaterial({color:0x051020,opacity:0.0,transparent:true}));
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -3.5;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// basic materials for face colors
+const COLORS = {
+  U: 0xffee6a, // yellow
+  D: 0xffffff, // white
+  F: 0xff4d4d, // red
+  B: 0x143cff, // blue
+  L: 0xff9f4d, // orange-like
+  R: 0x2ecc71  // green
+};
+const bgMat = new THREE.MeshStandardMaterial({color:0x072033});
+
+// cubie geometry
+const CUBIE_SIZE = 0.98;
+const geometry = new THREE.BoxGeometry(CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE);
+
+// We'll create 27 cubies stored in a map keyed by "x,y,z" for state tracking
+const cubies = new Map();
+const cubeRoot = new THREE.Object3D();
+scene.add(cubeRoot);
+
+function makeSticker(colorHex){
+  const mat = new THREE.MeshStandardMaterial({color:colorHex, metalness:0.1, roughness:0.45});
+  const geo = new THREE.PlaneGeometry(0.86, 0.86);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function makeCubie(x,y,z){
+  const g = geometry.clone();
+  const m = new THREE.Mesh(g, bgMat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  m.position.set(x,y,z);
+  m.userData.gridPos = new THREE.Vector3(x,y,z);
+  // stickers on six faces: +Y(U), -Y(D), +Z(F), -Z(B), -X(L), +X(R)
+  const stickers = {};
+  if (y==1){ const s=makeSticker(COLORS.U); s.position.set(0,0.501,0); s.rotation.x = -Math.PI/2; m.add(s); stickers.U = s; }
+  if (y==-1){ const s=makeSticker(COLORS.D); s.position.set(0,-0.501,0); s.rotation.x = Math.PI/2; m.add(s); stickers.D = s; }
+  if (z==1){ const s=makeSticker(COLORS.F); s.position.set(0,0,0.501); m.add(s); stickers.F = s; }
+  if (z==-1){ const s=makeSticker(COLORS.B); s.rotation.y = Math.PI; s.position.set(0,0,-0.501); m.add(s); stickers.B = s; }
+  if (x==-1){ const s=makeSticker(COLORS.L); s.rotation.y = Math.PI/2; s.position.set(-0.501,0,0); m.add(s); stickers.L = s; }
+  if (x==1){ const s=makeSticker(COLORS.R); s.rotation.y = -Math.PI/2; s.position.set(0.501,0,0); m.add(s); stickers.R = s; }
+  m.userData.stickers = stickers;
+  return m;
+}
+
+// create grid
+for (let x=-1;x<=1;x++){
+  for (let y=-1;y<=1;y++){
+    for (let z=-1;z<=1;z++){
+      const cubie = makeCubie(x,y,z);
+      cubeRoot.add(cubie);
+      cubies.set(key3(x,y,z), cubie);
+    }
+  }
+}
+
+// utilities
+function key3(x,y,z){ return `${x},${y},${z}`; }
+function parseKey(k){ return k.split(',').map(v=>parseInt(v)); }
+
+// snap a small epsilon to exact integers for positions/rotations
+function snapVector3(v){
+  // Round to nearest integer with small tolerance
+  v.x = Math.round(v.x);
+  v.y = Math.round(v.y);
+  v.z = Math.round(v.z);
+}
+
+function snapRotation(obj){
+  const q = obj.quaternion.clone();
+  // convert to Euler (intrinsic order), quantize to nearest 90deg
+  const e = new THREE.Euler().setFromQuaternion(q);
+  const qx = Math.round(e.x / (Math.PI/2)) * (Math.PI/2);
+  const qy = Math.round(e.y / (Math.PI/2)) * (Math.PI/2);
+  const qz = Math.round(e.z / (Math.PI/2)) * (Math.PI/2);
+  obj.rotation.set(qx,qy,qz);
+}
+
+/**
+ * Reparent `child` into `newParent` while preserving world transform.
+ * - Uses Object3D.attach when available (modern API).
+ * - Falls back to manual matrix method for older/newer Three.js builds where attach may not be present.
+ */
+function reparentPreserve(child, newParent){
+  if (!child) return;
+  // Fast path when attach() is available on the new parent
+  if (typeof newParent.attach === 'function'){
+    // ensure world matrices are up-to-date
+    if (child.parent) child.parent.updateMatrixWorld(true);
+    newParent.updateMatrixWorld(true);
+    try {
+      newParent.attach(child);
+      return;
+    } catch (err){
+      // if attach exists but fails for some reason, fall through to manual path
+      console.warn('attach() failed, falling back to manual reparent:', err);
+    }
+  }
+
+  // Manual reparent via matrices:
+  child.updateMatrixWorld(true);
+  const worldMatrix = child.matrixWorld.clone();
+
+  const oldParent = child.parent;
+  if (oldParent) oldParent.remove(child);
+  newParent.add(child);
+  newParent.updateMatrixWorld(true);
+
+  // parentInverse = inverse(newParent.matrixWorld)
+  const parentInverse = new THREE.Matrix4().copy(newParent.matrixWorld).invert();
+  const localMatrix = new THREE.Matrix4().multiplyMatrices(parentInverse, worldMatrix);
+
+  child.matrix.copy(localMatrix);
+  child.matrix.decompose(child.position, child.quaternion, child.scale);
+  child.updateMatrixWorld(true);
+}
+
+// rotation helpers: determine cubies in a layer for a move code like 'U' or 'R''
+const moveDefs = {
+  U: {axis:'y', coord:1, angle: -Math.PI/2, face:'U'},
+  "U'": {axis:'y', coord:1, angle: Math.PI/2, face:'U'},
+  D: {axis:'y', coord:-1, angle: Math.PI/2, face:'D'},
+  "D'": {axis:'y', coord:-1, angle: -Math.PI/2, face:'D'},
+  R: {axis:'x', coord:1, angle: -Math.PI/2, face:'R'},
+  "R'": {axis:'x', coord:1, angle: Math.PI/2, face:'R'},
+  L: {axis:'x', coord:-1, angle: Math.PI/2, face:'L'},
+  "L'": {axis:'x', coord:-1, angle: -Math.PI/2, face:'L'},
+  F: {axis:'z', coord:1, angle: -Math.PI/2, face:'F'},
+  "F'": {axis:'z', coord:1, angle: Math.PI/2, face:'F'},
+  B: {axis:'z', coord:-1, angle: Math.PI/2, face:'B'},
+  "B'": {axis:'z', coord:-1, angle: -Math.PI/2, face:'B'}
+};
+
+let isAnimating = false;
+let animationQueue = [];
+let moveHistory = []; // stores moves like "R", "U'", ...
+let undoneMoves = []; // for redo
+
+const statusEl = document.getElementById('status');
+const movesEl = document.getElementById('moves');
+const moveCountEl = document.getElementById('moveCount');
+const timeEl = document.getElementById('time');
+const speedEl = document.getElementById('speed');
+
+let timerInterval = null;
+let startTime = null;
+function startTimer(){
+  if (timerInterval) clearInterval(timerInterval);
+  startTime = Date.now();
+  timerInterval = setInterval(()=>{
+    const ms = Date.now() - startTime;
+    const s = Math.floor(ms/1000);
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    const cs = String(Math.floor((ms%1000)/10)).padStart(2,'0');
+    timeEl.textContent = `${mm}:${ss}.${cs}`;
+  }, 50);
+}
+function stopTimer(){
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+// perform a move immediately or queue it
+function queueMove(move){
+  animationQueue.push(move);
+  processQueue();
+}
+function processQueue(){
+  if (isAnimating) return;
+  if (animationQueue.length === 0) return;
+  // process sequentially using Promise chaining
+  const next = animationQueue.shift();
+  animateMove(next).then(()=> processQueue()).catch(err=>{
+    console.error('Error while animating move:', err);
+    isAnimating = false;
+    statusEl.textContent = 'Error';
+  });
+}
+
+// determine affected cubies for a move
+function cubiesForMove(move){
+  const def = moveDefs[move];
+  if (!def) throw new Error('invalid move ' + move);
+  const axis = def.axis;
+  const coord = def.coord;
+  const list = [];
+  for (const [k,cubie] of cubies.entries()){
+    // Use cubeRoot local positions (which are integer coordinates in solved state)
+    const pos = cubie.position;
+    const v = new THREE.Vector3(Math.round(pos.x), Math.round(pos.y), Math.round(pos.z));
+    if (axis === 'x' && v.x === coord) list.push(cubie);
+    if (axis === 'y' && v.y === coord) list.push(cubie);
+    if (axis === 'z' && v.z === coord) list.push(cubie);
+  }
+  return list;
+}
+
+// apply a move (animate rotation)
+function animateMove(move){
+  return new Promise(resolve=>{
+    const def = moveDefs[move];
+    if (!def) { resolve(); return; }
+    const axis = def.axis;
+    const coord = def.coord;
+    // find cubies
+    const list = cubiesForMove(move);
+    if (list.length === 0){ resolve(); return; }
+
+    // create group and attach
+    const g = new THREE.Object3D();
+    cubeRoot.add(g);
+
+    // convert world positions to group's local: attach while preserving world transform
+    list.forEach(c => {
+      // we reparent each cubie into g while preserving its world transform
+      reparentPreserve(c, g);
+    });
+
+    // animation
+    isAnimating = true;
+    statusEl.textContent = 'Animating: ' + move;
+    const baseDuration = 350; // ms
+    const duration = Math.max(80, baseDuration / parseFloat(speedEl.value)); // ms
+    const start = performance.now();
+    const fromQuat = g.quaternion.clone();
+    let axisVec;
+    if (axis === 'x') axisVec = new THREE.Vector3(1,0,0);
+    if (axis === 'y') axisVec = new THREE.Vector3(0,1,0);
+    if (axis === 'z') axisVec = new THREE.Vector3(0,0,1);
+    const targetQuat = new THREE.Quaternion().setFromAxisAngle(axisVec, def.angle);
+    const finalQuat = fromQuat.clone().multiply(targetQuat);
+
+    function tick(t){
+      const p = Math.min(1, (t-start)/duration);
+      THREE.Quaternion.slerp(fromQuat, finalQuat, g.quaternion, easeOutCubic(p));
+      controls.update();
+      renderer.render(scene,camera);
+      if (p < 1) requestAnimationFrame(tick);
+      else {
+        // finalize rotation: reparent children back to cubeRoot while preserving world transforms,
+        // then snap their positions/rotations to integer grid and remove temporary group.
+        const children = g.children.slice();
+        children.forEach(c => {
+          reparentPreserve(c, cubeRoot);
+          // round positions/rotations to integers/multiples of 90deg to prevent float drift
+          snapVector3(c.position);
+          snapRotation(c);
+        });
+        // remove group from scene
+        cubeRoot.remove(g);
+        // make sure cubeRoot's matrix is updated
+        cubeRoot.updateMatrixWorld(true);
+        isAnimating = false;
+        statusEl.textContent = 'Ready';
+        resolve();
+      }
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+function easeOutCubic(t){ return 1 - Math.pow(1-t,3); }
+
+// high level move application: record history and queue
+function doMove(move, record=true){
+  if (isAnimating) { animationQueue.push(move); return; }
+  if (record){
+    moveHistory.push(move);
+    undoneMoves.length = 0; // clear redo stack
+    renderHistory();
+    updateMoveCount();
+    if (!timerInterval) startTimer();
+  }
+  queueMove(move);
+}
+
+// UI handlers
+document.getElementById('scrambleBtn').addEventListener('click', ()=>{
+  const cnt = parseInt(document.getElementById('scrCnt').value || 25);
+  scramble(cnt);
+});
+document.getElementById('solveBtn').addEventListener('click', ()=>{ autoSolve(); });
+document.getElementById('undoBtn').addEventListener('click', ()=>{ undoMove(); });
+document.getElementById('redoBtn').addEventListener('click', ()=>{ redoMove(); });
+document.getElementById('resetBtn').addEventListener('click', ()=>{ resetCube(); });
+
+document.querySelectorAll('.faceBtn').forEach(btn=>{
+  btn.addEventListener('click', ()=> doMove(btn.dataset.move));
+});
+document.getElementById('scrAmtBtn').addEventListener('click', ()=>{
+  const cnt = parseInt(document.getElementById('scrCnt').value || 25); scramble(cnt);
+});
+
+// keyboard controls
+window.addEventListener('keydown', (e)=>{
+  if (['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  const k = e.key;
+  if ('URFDLBurfdlb'.includes(k)){
+    // uppercase = cw move, lowercase = ccw -> we'll map lowercase to prime (inverse)
+    let move = k.toUpperCase();
+    if (k === k.toLowerCase()) move = move + "'";
+    doMove(move);
+  }
+  // undo/redo shortcuts
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z'){ undoMove(); e.preventDefault(); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key==='Z'))){ redoMove(); e.preventDefault(); }
+});
+
+function undoMove(){
+  if (moveHistory.length===0) return;
+  const last = moveHistory.pop();
+  const inv = invertMove(last);
+  undoneMoves.push(last);
+  renderHistory();
+  updateMoveCount();
+  queueMove(inv); // don't record inverse in main history
+}
+
+function redoMove(){
+  if (undoneMoves.length===0) return;
+  const m = undoneMoves.pop();
+  moveHistory.push(m);
+  renderHistory();
+  updateMoveCount();
+  queueMove(m);
+}
+
+function invertMove(m){
+  return m.endsWith("'") ? m.slice(0,-1) : m + "'";
+}
+
+function renderHistory(){
+  movesEl.innerHTML = '';
+  moveHistory.forEach((m,i)=>{
+    const el = document.createElement('div');
+    el.textContent = `${i+1}. ${m}`;
+    el.style.cursor='default';
+    movesEl.appendChild(el);
+  });
+}
+
+function updateMoveCount(){
+  moveCountEl.textContent = moveHistory.length;
+}
+
+// scramble: apply random moves but also avoid immediate inverse repetition
+function scramble(n=25){
+  const faces = ['U','R','F','D','L','B'];
+  const suff = ["","'"];
+  let last = null;
+  const seq = [];
+  for (let i=0;i<n;i++){
+    let face, s;
+    do {
+      face = faces[Math.floor(Math.random()*faces.length)];
+      s = suff[Math.floor(Math.random()*suff.length)];
+    } while (last && face === last); // avoid same face twice in a row
+    last = face;
+    seq.push(face + s);
+  }
+  // clear history and then apply scramble moves (record them)
+  moveHistory = [];
+  undoneMoves = [];
+  renderHistory();
+  seq.forEach(m => {
+    moveHistory.push(m);
+    animationQueue.push(m);
+  });
+  updateMoveCount();
+  processQueue();
+  startTimer();
+  statusEl.textContent = 'Scrambled';
+}
+
+// autoSolve: play inverse of entire moveHistory (from last to first)
+function autoSolve(){
+  if (isAnimating || animationQueue.length>0) return;
+  const invMoves = moveHistory.slice().reverse().map(invertMove);
+  moveHistory = []; undoneMoves = [];
+  renderHistory(); updateMoveCount();
+  invMoves.forEach(m => animationQueue.push(m));
+  processQueue();
+  // stop timer when queue fully drains; simplest approach: poll until queue empty
+  const check = setInterval(()=>{
+    if (!isAnimating && animationQueue.length===0){
+      stopTimer();
+      statusEl.textContent = 'Solved';
+      clearInterval(check);
+    }
+  }, 200);
+}
+
+// reset cube (snap everything back to solved positions)
+function resetCube(){
+  // stop animations and clear queue
+  animationQueue = [];
+  isAnimating = false;
+  // snap cubies back to initial grid positions
+  for (const [k,c] of cubies.entries()){
+    const [x,y,z] = parseKey(k);
+    c.position.set(x,y,z);
+    c.rotation.set(0,0,0);
+    c.quaternion.set(0,0,0,1);
+    c.updateMatrixWorld(true);
+  }
+  moveHistory = [];
+  undoneMoves = [];
+  renderHistory(); updateMoveCount();
+  statusEl.textContent = 'Reset';
+  stopTimer();
+  timeEl.textContent = '00:00.00';
+}
+
+// helper to set initial camera and respond to resize
+function onWindowResize(){
+  const rect = document.getElementById('viewer').getBoundingClientRect();
+  const w = Math.max(300, rect.width); const h = Math.max(200, rect.height);
+  renderer.setSize(w, h);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onWindowResize);
+onWindowResize();
+
+// initial render loop
+function animate(){
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// UI polish: adjust viewer size to parent
+(function sizeLoop(){
+  onWindowResize();
+  requestAnimationFrame(sizeLoop);
+})();
+
+// small helpers for nicer defaults
+resetCube();
+
+// ensure pointer events on canvas do orbit not select
+renderer.domElement.style.touchAction = 'none';
+
+// Slight tilt so cube looks nicer initially
+cubeRoot.rotation.x = -0.4;
+cubeRoot.rotation.y = 0.6;
+
+// small responsiveness: set viewer min height
+document.getElementById('viewer').style.minHeight = '560px';
+
+</script>
+</body>
+</html>
